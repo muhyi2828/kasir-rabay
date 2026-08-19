@@ -229,10 +229,19 @@ with tab1:
             except Exception as e:
                 st.error(f"Gagal scan: {e}")
 
+        # --- PREVIEW HASIL SCAN DIPERBAIKI (MENAMPILKAN TABEL/DAFTAR NOMINAL) ---
         if st.session_state['draf_scan']:
             st.markdown("---")
             jumlah_draf = len(st.session_state['draf_scan'])
-            st.info(f"Ditemukan {jumlah_draf} nominal transaksi.")
+            st.info(f"✨ Ditemukan {jumlah_draf} nominal transaksi dari gambar:")
+            
+            # Menampilkan daftar nominal dalam bentuk tabel preview
+            df_preview = pd.DataFrame({
+                "No": range(1, jumlah_draf + 1),
+                "Nominal Terdeteksi (Rp)": [f"Rp {n:,}" for n in st.session_state['draf_scan']]
+            })
+            st.dataframe(df_preview, use_container_width=True, hide_index=True)
+            
             jenis_massal = st.radio("Jenis untuk semua data di atas:", ["Bank", "E-Wallet", "Tarik Tunai"], horizontal=True)
             
             if st.button("💾 Simpan Semua ke Database & Kas", type="primary", use_container_width=True):
