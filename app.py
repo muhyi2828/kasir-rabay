@@ -11,48 +11,20 @@ import pytz
 
 st.set_page_config(page_title="RABAY CELL PRO - ERP SYSTEM", layout="centered", page_icon="🚀")
 
-# --- CUSTOM CSS UNTUK TAMPILAN MODERN & ELEGAN ---
+# --- CUSTOM CSS TAMPILAN MODERN ---
 st.markdown("""
     <style>
-    /* Mengatur latar belakang utama & font */
-    .main {
-        background-color: #f8f9fa;
-    }
-    /* Desain Kotak Kartu / Card */
-    .metric-card {
-        background-color: #ffffff;
-        padding: 20px;
-        border-radius: 12px;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.05);
-        margin-bottom: 15px;
-        border-left: 5px solid #ff4b4b;
-    }
+    .main { background-color: #f8f9fa; }
     .metric-card-blue {
-        background-color: #ffffff;
-        padding: 20px;
-        border-radius: 12px;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.05);
-        margin-bottom: 15px;
-        border-left: 5px solid #1f77b4;
+        background-color: #ffffff; padding: 20px; border-radius: 12px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.05); margin-bottom: 15px; border-left: 5px solid #1f77b4;
     }
     .metric-card-green {
-        background-color: #ffffff;
-        padding: 20px;
-        border-radius: 12px;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.05);
-        margin-bottom: 15px;
-        border-left: 5px solid #2ca02c;
+        background-color: #ffffff; padding: 20px; border-radius: 12px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.05); margin-bottom: 15px; border-left: 5px solid #2ca02c;
     }
-    /* Mempercantik Judul Header */
-    h1 {
-        color: #1E1E1E;
-        font-weight: 800;
-        letter-spacing: -0.5px;
-    }
-    h3 {
-        color: #333333;
-        font-weight: 600;
-    }
+    h1 { color: #1E1E1E; font-weight: 800; letter-spacing: -0.5px; }
+    h3 { color: #333333; font-weight: 600; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -88,7 +60,6 @@ if 'nama_barang_ditemukan' not in st.session_state: st.session_state['nama_baran
 if 'baris_stok_ditemukan' not in st.session_state: st.session_state['baris_stok_ditemukan'] = None
 if 'profit_barang_ini' not in st.session_state: st.session_state['profit_barang_ini'] = 0
 
-# --- HEADER UTAMA ---
 st.title("🚀 RABAY CELL PRO")
 st.caption("Sistem Kasir & Manajemen Stok Konter Profesional")
 
@@ -175,7 +146,8 @@ with tab1:
                 except: pass
 
         st.markdown("---")
-        pilihan_jenis = ["Bank", "E-Wallet", "Tarik Tunai", "Penjualan Barang"]
+        # Ditambahkan pilihan "Transaksi Lainnya"
+        pilihan_jenis = ["Bank", "E-Wallet", "Tarik Tunai", "Penjualan Barang", "Transaksi Lainnya"]
         current_idx = pilihan_jenis.index(st.session_state['input_jenis']) if st.session_state['input_jenis'] in pilihan_jenis else 0
         
         st.session_state['input_jenis'] = st.radio("Jenis Transaksi:", pilihan_jenis, index=current_idx, horizontal=True)
@@ -183,14 +155,25 @@ with tab1:
         if st.session_state['nama_barang_ditemukan'] and st.session_state['input_jenis'] == "Penjualan Barang":
             st.success(f"📦 Barang Terdeteksi: **{st.session_state['nama_barang_ditemukan']}** | Estimasi Untung: **Rp {st.session_state['profit_barang_ini']:,}**")
 
+        # Input nominal/harga
         nominal_trx = st.number_input("Nominal / Harga (Rp):", value=st.session_state['input_nominal'], step=10000)
         
-        if nominal_trx > 0:
+        # Jika memilih Transaksi Lainnya, beri tambahan input keuntungan manual
+        profit_manual = 0
+        if st.session_state['input_jenis'] == "Transaksi Lainnya":
+            profit_manual = st.number_input("Keuntungan / Cuan Manual (Rp):", value=0, step=1000)
+
+        if nominal_trx > 0 or (st.session_state['input_jenis'] == "Transaksi Lainnya" and nominal_trx >= 0):
             if st.session_state['input_jenis'] == "Penjualan Barang":
                 admin = 0
                 total_uang = nominal_trx
                 profit_bersih = st.session_state['profit_barang_ini'] if st.session_state['profit_barang_ini'] > 0 else 0
                 st.info(f"🛒 **Penjualan Barang Fisik**\n- Uang Masuk Cash: **Rp {total_uang:,}**\n- Perkiraan Untung: **Rp {profit_bersih:,}**")
+            elif st.session_state['input_jenis'] == "Transaksi Lainnya":
+                admin = 0
+                total_uang = nominal_trx
+                profit_bersih = profit_manual
+                st.info(f"💼 **Transaksi Lainnya (Jasa/Servis/Lainnya)**\n- Uang Masuk Cash: **Rp {total_uang:,}**\n- Keuntungan Manual: **Rp {profit_bersih:,}**")
             else:
                 admin = hitung_admin(nominal_trx, st.session_state['input_jenis'])
                 total_uang = nominal_trx + admin if st.session_state['input_jenis'] != "Tarik Tunai" else nominal_trx - admin
@@ -215,6 +198,8 @@ with tab1:
                         stok_sekarang = int(ws_s.cell(row_num, 3).value)
                         if stok_sekarang > 0:
                             ws_s.update_cell(row_num, 3, stok_sekarang - 1)
+                elif st.session_state['input_jenis'] == "Transaksi Lainnya":
+                    st.session_state['modal_cash'] += nominal_trx
                 elif st.session_state['input_jenis'] == "Tarik Tunai":
                     st.session_state['modal_cash'] -= total_uang
                     st.session_state['modal_digi'] += nominal_trx
@@ -386,7 +371,6 @@ with tab3:
 with tab4:
     st.subheader("📊 Dashboard Keuangan & Profit")
     
-    # KARTU TAMPILAN KEUANGAN ESTETIK
     st.markdown(f"""
         <div class="metric-card-blue">
             <h4 style="margin:0; color:#1f77b4;">💵 Cash di Laci</h4>
@@ -414,7 +398,6 @@ with tab4:
                     df_hari_ini['Profit_Val'] = pd.to_numeric(df_hari_ini.iloc[:, 5], errors='coerce').fillna(0)
                     profit_hari_ini = df_hari_ini['Profit_Val'].sum()
 
-    # KARTU PROFIT UTAMA
     st.markdown(f"""
         <div class="metric-card-green">
             <h4 style="margin:0; color:#2ca02c;">🔥 Total Keuntungan (Profit) Hari Ini</h4>
