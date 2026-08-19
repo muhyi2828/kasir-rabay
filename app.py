@@ -20,7 +20,7 @@ def konek_gsheets():
         sh = gc.open("Database Kasir")
         
         try: ws_t = sh.worksheet("Transaksi")
-        except: ws_t = sh.add_worksheet(title="Transaksi", rows=1000, cols=6) # Kolom ditambah untuk profit
+        except: ws_t = sh.add_worksheet(title="Transaksi", rows=1000, cols=6)
             
         try: ws_k = sh.worksheet("Kas_Harian")
         except: ws_k = sh.add_worksheet(title="Kas_Harian", rows=1000, cols=5)
@@ -101,7 +101,6 @@ with tab1:
             st.session_state['baris_stok_ditemukan'] = None
             st.session_state['profit_barang_ini'] = 0
             
-            # Cek apakah kode barang stok
             if ws_s:
                 stok_data = ws_s.get_all_values()
                 if len(stok_data) > 1:
@@ -135,7 +134,7 @@ with tab1:
         st.session_state['input_jenis'] = st.radio("Jenis Transaksi:", pilihan_jenis, index=current_idx, horizontal=True)
         
         if st.session_state['nama_barang_ditemukan'] and st.session_state['input_jenis'] == "Penjualan Barang":
-            st.success(f"📦 Barang: **{st.session_state['nama_barang_ditemukan']}** | Estimasi Untung: **Rp {st.session_state['profit_barang_ini']:,}**")
+            st.success(f"📦 Barang: **{st.session_state['nama_barang_ditemukan']}** | Untung: **Rp {st.session_state['profit_barang_ini']:,}**")
 
         nominal_trx = st.number_input("Nominal / Harga (Rp):", value=st.session_state['input_nominal'], step=10000)
         
@@ -148,7 +147,7 @@ with tab1:
             else:
                 admin = hitung_admin(nominal_trx, st.session_state['input_jenis'])
                 total_uang = nominal_trx + admin if st.session_state['input_jenis'] != "Tarik Tunai" else nominal_trx - admin
-                profit_bersih = admin # Keuntungan dari transaksi keuangan adalah uang adminnya
+                profit_bersih = admin
                 
                 c1, c2 = st.columns(2)
                 c1.metric("Nominal", f"Rp {nominal_trx:,}")
@@ -176,7 +175,6 @@ with tab1:
                     st.session_state['modal_digi'] -= nominal_trx
                     st.session_state['modal_cash'] += total_uang
                 
-                # Simpan ke Sheets Transaksi (Format: Waktu, Jenis, Nominal, Admin, Total, Profit)
                 if ws_t: ws_t.append_row([waktu, st.session_state['input_jenis'], nominal_trx, admin, total_uang, profit_bersih])
                 st.success("✅ Berhasil! Kas, Stok, dan Profit tercatat.")
                 st.session_state['input_nominal'] = 0
@@ -209,7 +207,7 @@ with tab1:
                 for nom in st.session_state['draf_scan']:
                     admin = hitung_admin(nom, jenis_massal)
                     total = nom + admin if jenis_massal != "Tarik Tunai" else nom - admin
-                    profit_scan = admin # Profit dari mutasi scan adalah adminnya
+                    profit_scan = admin
                     
                     if jenis_massal == "Tarik Tunai":
                         st.session_state['modal_cash'] -= total
@@ -224,7 +222,6 @@ with tab1:
                 st.success("Semua data berhasil disimpan & profit tercatat!")
                 st.rerun()
 
-# --- TAB 2: STOK BARANG ---
 with tab2:
     st.subheader("📦 Manajemen Stok Barang & Barcode")
     with st.form("form_tambah_stok", clear_on_submit=True):
@@ -264,7 +261,6 @@ with tab2:
         else:
             st.info("Belum ada data stok.")
 
-# --- TAB 3: RIWAYAT ---
 with tab3:
     st.subheader("📋 Kelola Riwayat Transaksi")
     if ws_t:
@@ -284,7 +280,6 @@ with tab3:
         else:
             st.info("Belum ada riwayat transaksi.")
 
-# --- TAB 4: DASHBOARD & UNTUNG ---
 with tab4:
     st.subheader("📊 Keuangan, Rekap & Grafik Profit")
     c1, c2 = st.columns(2)
@@ -293,20 +288,19 @@ with tab4:
     
     st.markdown("---")
     
-    # Hitung Keuntungan Hari Ini Berdasarkan Data Transaksi di Sheet
+    # Hitung Keuntungan Hari Ini Secara Aman
     profit_hari_ini = 0
     if ws_t:
         data_t = ws_t.get_all_values()
         if len(data_t) > 1:
             df_trx = pd.DataFrame(data_t[1:], columns=data_t[0])
-            # Format kolom waktu untuk ambil tanggal hari ini
-            if 'Waktu' in df_trx.columns and 'Profit' in df_trx.columns:
-                df_trx['Tanggal'] = pd.to_datetime(df_trx['Waktu']).dt.strftime('%Y-%m-%d')
+            if 'Waktu' in df_trx.columns:
+                df_trx['Tanggal'] = pd.to_datetime(df_trx['Waktu'], errors='coerce').dt.strftime('%Y-%m-%d')
                 tgl_hari_ini = datetime.now(pytz.timezone('Asia/Jakarta')).strftime('%Y-%m-%d')
                 
-                df_hari_ini = df_trx[df_trx['Tanggal'] == tgl_hari_ini]
-                if not df_hari_ini.empty:
-                    df_hari_ini['Profit'] = pd.to_numeric(df_hari_ini['Profit'], errors='fill_value').fillna(0)
+                df_hari_ini = df_trx[df_trx['Tanggal'] == tgl_hari_ini].copy()
+                if not df_hari_ini.empty and 'Profit' in df_hari_ini.columns:
+                    df_hari_ini['Profit'] = pd.to_numeric(df_hari_ini['Profit'], errors='coerce').fillna(0)
                     profit_hari_ini = df_hari_ini['Profit'].sum()
 
     st.metric("🔥 Total Keuntungan (Profit) Hari Ini", f"Rp {profit_hari_ini:,}")
@@ -323,10 +317,9 @@ with tab4:
         if len(data_t) > 1:
             df_trx_all = pd.DataFrame(data_t[1:], columns=data_t[0])
             if 'Waktu' in df_trx_all.columns and 'Profit' in df_trx_all.columns:
-                df_trx_all['Tanggal'] = pd.to_datetime(df_trx_all['Waktu']).dt.strftime('%Y-%m-%d')
+                df_trx_all['Tanggal'] = pd.to_datetime(df_trx_all['Waktu'], errors='coerce').dt.strftime('%Y-%m-%d')
                 df_trx_all['Profit'] = pd.to_numeric(df_trx_all['Profit'], errors='coerce').fillna(0)
                 
-                # Grouping profit berdasarkan tanggal
                 df_profit_harian = df_trx_all.groupby('Tanggal')['Profit'].sum().reset_index()
                 
                 fig_profit = px.bar(df_profit_harian, x='Tanggal', y='Profit', 
