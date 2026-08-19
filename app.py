@@ -11,12 +11,24 @@ import pytz
 
 st.set_page_config(page_title="RABAY CELL PRO", layout="centered", page_icon="🚀")
 
-# --- CUSTOM CSS KHUSUS HP & TAMPILAN RAPI ---
+# --- CUSTOM CSS UNTUK MEMAKSA ELEMEN SEJAJAR DI HP ---
 st.markdown("""
     <style>
     .main { background-color: #0e1117; color: #ffffff; }
-    /* Memaksa elemen agar tidak turun bertumpuk di HP */
-    .row-widget.stHorizontal { display: flex; flex-direction: row; align-items: center; }
+    
+    /* Memaksa kontainer agar sejajar ke samping tanpa turun ke bawah */
+    .row-flex {
+        display: flex;
+        flex-direction: row;
+        justify-content: space-between;
+        align-items: center;
+        gap: 10px;
+        width: 100%;
+        margin-bottom: 10px;
+    }
+    .flex-item {
+        flex: 1;
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -92,14 +104,18 @@ def hitung_admin(nominal, jenis):
             return 35000 + (kelipatan * 5000)
 
 # --- 1. HEADER ATAS: RABAY CELL & TOMBOL STOK BARANG SEJAJAR ---
-col_h1, col_h2 = st.columns([1.3, 0.9])
-with col_h1:
-    st.markdown("<h3 style='color:#00b4d8; margin:0; padding-top:5px;'>RABAY CELL</h3>", unsafe_allow_html=True)
-with col_h2:
-    if st.button("📦 STOK BARANG", use_container_width=True, type="secondary"):
-        st.session_state['menu_aktif'] = "Stok Barang"
+st.markdown("""
+    <div class="row-flex" style="margin-bottom: 5px;">
+        <div style="flex: 1.5;"><h3 style="color:#00b4d8; margin:0;">RABAY CELL</h3></div>
+""", unsafe_allow_html=True)
 
-# --- 2. MODAL CASH & SALDO DIGITAL SEJAJAR DI BAWAHNYA ---
+if st.button("📦 STOK BARANG", type="secondary"):
+    st.session_state['menu_aktif'] = "Stok Barang"
+    st.rerun()
+
+st.markdown("</div>", unsafe_allow_html=True)
+
+# --- 2. MODAL CASH & SALDO DIGITAL SEJAJAR ---
 col_m1, col_m2 = st.columns(2)
 with col_m1:
     st.markdown("<p style='font-size:11px; color:#aaa; margin:0;'>Modal Cash:</p>", unsafe_allow_html=True)
@@ -115,12 +131,15 @@ nav1, nav2, nav3 = st.columns(3)
 with nav1:
     if st.button("⚡ TRANSAKSI", use_container_width=True, type="primary" if st.session_state['menu_aktif']=="Transaksi" else "secondary"):
         st.session_state['menu_aktif'] = "Transaksi"
+        st.rerun()
 with nav2:
     if st.button("📋 RIWAYAT", use_container_width=True, type="primary" if st.session_state['menu_aktif']=="Riwayat" else "secondary"):
         st.session_state['menu_aktif'] = "Riwayat"
+        st.rerun()
 with nav3:
     if st.button("📊 DASHBOARD", use_container_width=True, type="primary" if st.session_state['menu_aktif']=="Dashboard" else "secondary"):
         st.session_state['menu_aktif'] = "Dashboard"
+        st.rerun()
 
 st.markdown("---")
 
