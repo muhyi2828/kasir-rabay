@@ -563,12 +563,30 @@ with tab3:
             fig_profit = px.bar(df_profit_harian, x='Tanggal', y='Profit_Val', template="plotly_dark", color_discrete_sequence=['#14B8A6'])
             st.plotly_chart(fig_profit, use_container_width=True)
 
-# --- TAB 4: STOK BARANG (DENGAN PEMBACAAN KOLOM KATEGORI OTOMATIS) ---
+# --- TAB 4: STOK BARANG (DENGAN PILIHAN / TAMBAH KATEGORI DROPDOWN) ---
 with tab4:
+    # Ambil daftar kategori yang sudah ada di database untuk opsi dropdown
+    existing_categories = ["Perdana", "Voucher", "Aksesoris", "Umum"]
+    if ws_s:
+        data_s_raw = ws_s.get_all_values()
+        if len(data_s_raw) > 1:
+            for r in data_s_raw[1:]:
+                if len(r) > 6 and r[6] and r[6] not in existing_categories:
+                    existing_categories.append(r[6])
+
     with st.expander("➕ Tambah Barang Baru"):
         barcode_input = st.text_input("Nomor Barcode / Label:")
         nama_barang = st.text_input("Nama Barang:")
-        kategori_barang = st.text_input("Kategori Barang (Contoh: Perdana, Voucher, Aksesoris):", value="Umum")
+        
+        # Pilihan Kategori: Pilih yang ada atau Buat Baru
+        opsi_kategori = existing_categories + ["+ Buat Kategori Baru..."]
+        pilih_kat_tambah = st.selectbox("Pilih Kategori Barang:", options=opsi_kategori, key="sel_kat_tambah")
+        
+        if pilih_kat_tambah == "+ Buat Kategori Baru...":
+            kategori_barang = st.text_input("Ketik Nama Kategori Baru:", value="", key="input_kat_baru_tambah")
+        else:
+            kategori_barang = pilih_kat_tambah
+
         stok_awal = st.number_input("Jumlah Stok:", min_value=1, step=1)
         
         harga_modal = st.number_input("Harga Modal (Rp):", min_value=0, step=1000)
@@ -580,8 +598,9 @@ with tab4:
         kode_cepat_brg = st.text_input("Kode Cepat Barang (Contoh: SPI, VCG1):")
         
         if st.button("💾 Simpan Barang", type="primary", use_container_width=True):
+            final_kat = kategori_barang if kategori_barang.strip() else "Umum"
             if ws_s and nama_barang:
-                ws_s.append_row([barcode_input, nama_barang, stok_awal, harga_modal, harga_jual, kode_cepat_brg, kategori_barang])
+                ws_s.append_row([barcode_input, nama_barang, stok_awal, harga_modal, harga_jual, kode_cepat_brg, final_kat])
                 st.success("Tersimpan!")
                 st.rerun()
 
@@ -590,10 +609,7 @@ with tab4:
     if ws_s:
         data_s = ws_s.get_all_values()
         if len(data_s) > 1:
-            header_stok = data_s[0]
             rows_stok = data_s[1:]
-            
-            # Pastikan setiap baris memiliki 7 kolom (jika data lama kurang, tambahkan 'Umum')
             normalized_rows = []
             for r in rows_stok:
                 while len(r) < 7:
@@ -603,9 +619,9 @@ with tab4:
             df_s = pd.DataFrame(normalized_rows, columns=['Barcode', 'Nama_Barang', 'Stok', 'Harga_Modal', 'Harga_Jual', 'Kode_Cepat', 'Kategori'])
             df_s['No_Baris'] = range(2, len(df_s) + 2)
 
-            # FILTER BERDASARKAN KATEGORI BARANG
-            list_kategori = ["Semua Kategori"] + sorted(df_s['Kategori'].dropna().unique().tolist())
-            pilih_filter_kat = st.selectbox("Filter Berdasarkan Kategori:", options=list_kategori)
+            # Update list kategori dari data terbaru
+            list_kategori_filter = ["Semua Kategori"] + sorted(df_s['Kategori'].dropna().unique().tolist())
+            pilih_filter_kat = st.selectbox("Filter Berdasarkan Kategori:", options=list_kategori_filter)
             
             df_s_filtered = df_s.copy()
             if pilih_filter_kat != "Semua Kategori":
@@ -652,10 +668,19 @@ with tab4:
                         es_mod = st.number_input("Harga Modal", value=int(row['Harga_Modal']) if str(row['Harga_Modal']).isdigit() else 0, step=1000)
                         es_jul = st.number_input("Harga Jual", value=int(row['Harga_Jual']) if str(row['Harga_Jual']).isdigit() else 0, step=1000)
                         es_kod = st.text_input("Kode Cepat", value=row['Kode_Cepat'])
-                        es_kat = st.text_input("Kategori", value=kat)
+                        
+                        # Dropdown Kategori untuk Edit
+                        opsi_kat_edit = existing_categories + ["+ Buat Kategori Baru..."]
+                        default_kat_idx = opsi_kat_edit.index(kat) if kat in opsi_kat_edit else 0
+                        es_pilih_kat = st.selectbox("Kategori Barang", options=opsi_kat_edit, index=default_kat_idx)
+                        if es_pilih_kat == "+ Buat Kategori Baru...":
+                            es_kat = st.text_input("Ketik Kategori Baru", value="", key=f"input_kat_baru_edit_{b_stok}")
+                        else:
+                            es_kat = es_pilih_kat
                         
                         if st.form_submit_button("Simpan Perubahan Stok"):
-                            ws_s.update(f"A{b_stok}:G{b_stok}", [[es_bc, es_nm, es_stk, es_mod, es_jul, es_kod, es_kat]])
+                            final_es_kat = es_kat if es_kat.strip() else kat
+                            ws_s.update(f"A{b_stok}:G{b_stok}", [[es_bc, es_nm, es_stk, es_mod, es_jul, es_kod, final_es_kat]])
                             st.session_state[f"mode_edit_stk_{b_stok}"] = False
                             st.success("Stok diperbarui!")
                             st.rerun()
