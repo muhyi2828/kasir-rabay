@@ -222,7 +222,7 @@ with tab1:
                 st.success("Semua data berhasil disimpan & profit tercatat!")
                 st.rerun()
 
-# --- TAB 2: STOK BARANG & EDIT STOK ---
+# --- TAB 2: STOK BARANG & EDIT BERDASARKAN NAMA ---
 with tab2:
     st.subheader("📦 Manajemen Stok Barang & Barcode")
     
@@ -253,30 +253,36 @@ with tab2:
             df_s['No_Baris'] = range(2, len(df_s) + 2)
             st.dataframe(df_s, use_container_width=True)
             
-            # --- FITUR EDIT STOK BARANG ---
+            # --- FITUR EDIT STOK BERDASARKAN NAMA BARANG ---
             st.markdown("---")
             st.subheader("✏️ Edit Data Stok Barang")
-            pilih_baris_edit = st.selectbox("Pilih Nomor Baris Barang yang mau di-edit:", options=[0] + df_s['No_Baris'].tolist())
             
-            if pilih_baris_edit > 0:
-                # Ambil data lama dari baris tersebut di Google Sheets
-                row_data = ws_s.row_values(pilih_baris_edit)
-                # Pastikan panjang row_data aman
-                while len(row_data) < 6: row_data.append("")
-                
-                with st.form("form_edit_stok"):
-                    edit_barcode = st.text_input("Barcode / Label:", value=row_data[0])
-                    edit_nama = st.text_input("Nama Barang:", value=row_data[1])
-                    edit_stok = st.number_input("Jumlah Stok:", value=int(row_data[2]) if row_data[2].isdigit() else 0, step=1)
-                    edit_modal = st.number_input("Harga Modal (Rp):", value=int(row_data[3]) if row_data[3].isdigit() else 0, step=1000)
-                    edit_jual = st.number_input("Harga Jual (Rp):", value=int(row_data[4]) if row_data[4].isdigit() else 0, step=1000)
-                    edit_kode = st.text_input("Kode Cepat Barang:", value=row_data[5])
+            # Ambil daftar nama barang untuk pilihan dropdown
+            daftar_nama_barang = df_s['Nama_Barang'].tolist()
+            pilih_nama_edit = st.selectbox("Pilih Nama Barang yang mau di-edit:", options=["-- Pilih Barang --"] + daftar_nama_barang)
+            
+            if pilih_nama_edit != "-- Pilih Barang --":
+                # Cari nomor baris berdasarkan nama barang yang dipilih
+                match_row = df_s[df_s['Nama_Barang'] == pilih_nama_edit]
+                if not match_row.empty:
+                    pilih_baris_edit = int(match_row.iloc[0]['No_Baris'])
+                    row_data = ws_s.row_values(pilih_baris_edit)
+                    while len(row_data) < 6: row_data.append("")
                     
-                    btn_update = st.form_submit_button("🔄 Update Perubahan Stok", type="primary")
-                    if btn_update:
-                        ws_s.update(f"A{pilih_baris_edit}:F{pilih_baris_edit}", [[edit_barcode, edit_nama, edit_stok, edit_modal, edit_jual, edit_kode]])
-                        st.success(f"Data barang baris ke-{pilih_baris_edit} berhasil diperbarui!")
-                        st.rerun()
+                    with st.form("form_edit_stok"):
+                        st.write(f"Sedang mengedit: **{pilih_nama_edit}**")
+                        edit_barcode = st.text_input("Barcode / Label:", value=row_data[0])
+                        edit_nama = st.text_input("Nama Barang:", value=row_data[1])
+                        edit_stok = st.number_input("Jumlah Stok:", value=int(row_data[2]) if row_data[2].isdigit() else 0, step=1)
+                        edit_modal = st.number_input("Harga Modal (Rp):", value=int(row_data[3]) if row_data[3].isdigit() else 0, step=1000)
+                        edit_jual = st.number_input("Harga Jual (Rp):", value=int(row_data[4]) if row_data[4].isdigit() else 0, step=1000)
+                        edit_kode = st.text_input("Kode Cepat Barang:", value=row_data[5])
+                        
+                        btn_update = st.form_submit_button("🔄 Update Perubahan Stok", type="primary")
+                        if btn_update:
+                            ws_s.update(f"A{pilih_baris_edit}:F{pilih_baris_edit}", [[edit_barcode, edit_nama, edit_stok, edit_modal, edit_jual, edit_kode]])
+                            st.success(f"Data barang **{edit_nama}** berhasil diperbarui!")
+                            st.rerun()
 
             st.markdown("---")
             baris_hapus_stok = st.multiselect("Pilih Baris Stok yang ingin dihapus:", options=df_s['No_Baris'].tolist(), key="del_stok")
