@@ -37,7 +37,7 @@ with st.expander("💰 Modal Awal Hari Ini"):
     st.session_state['modal_cash'] = st.number_input("Cash di Laci (Rp):", value=st.session_state['modal_cash'], step=50000)
     st.session_state['modal_digi'] = st.number_input("Saldo Digital (Rp):", value=st.session_state['modal_digi'], step=50000)
 
-# 4. FUNGSI HITUNG ADMIN
+# 4. FUNGSI HITUNG ADMIN SESUAI TABEL RESMI BOS
 def hitung_admin(nominal, jenis):
     if jenis == "E-Wallet" and nominal <= 1500000:
         if nominal <= 98000: return 2000
@@ -46,7 +46,21 @@ def hitung_admin(nominal, jenis):
         elif nominal <= 699000: return 5000
         elif nominal <= 1000000: return 8000
         else: return 10000
-    else: 
+    elif jenis == "Tarik Tunai":
+        if nominal <= 300000: return 3000
+        elif nominal <= 1000000: return 5000
+        elif nominal <= 2000000: return 8000
+        elif nominal <= 3000000: return 10000
+        elif nominal <= 5000000: return 15000
+        elif nominal <= 7000000: return 20000
+        elif nominal <= 10000000: return 25000
+        elif nominal <= 15000000: return 30000
+        elif nominal <= 20000000: return 35000
+        else:
+            sisa = nominal - 20000000
+            kelipatan = -(-sisa // 5000000)
+            return 35000 + (kelipatan * 5000)
+    else: # Tarif Bank / Transfer standar
         if nominal <= 98000: return 3000
         elif nominal <= 400000: return 5000
         elif nominal <= 700000: return 8000
@@ -128,15 +142,21 @@ with tab1:
             st.markdown("---")
             jumlah_draf = len(st.session_state['draf_scan'])
             st.info(f"Ditemukan {jumlah_draf} nominal transaksi.")
-            jenis_massal = st.radio("Jenis untuk semua data di atas:", ["Bank", "E-Wallet"], horizontal=True)
+            jenis_massal = st.radio("Jenis untuk semua data di atas:", ["Bank", "E-Wallet", "Tarik Tunai"], horizontal=True)
             
             if st.button("💾 Simpan Semua ke Database & Kas", type="primary", use_container_width=True):
                 waktu = datetime.now(pytz.timezone('Asia/Jakarta')).strftime("%Y-%m-%d %H:%M:%S")
                 for nom in st.session_state['draf_scan']:
                     admin = hitung_admin(nom, jenis_massal)
-                    total = nom + admin
-                    st.session_state['modal_digi'] -= nom
-                    st.session_state['modal_cash'] += total
+                    total = nom + admin if jenis_massal != "Tarik Tunai" else nom - admin
+                    
+                    if jenis_massal == "Tarik Tunai":
+                        st.session_state['modal_cash'] -= total
+                        st.session_state['modal_digi'] += nom
+                    else:
+                        st.session_state['modal_digi'] -= nom
+                        st.session_state['modal_cash'] += total
+                        
                     if ws_t: ws_t.append_row([waktu, jenis_massal, nom, admin, total])
                 
                 st.session_state['draf_scan'] = []
