@@ -11,13 +11,23 @@ import pytz
 
 st.set_page_config(page_title="RABAY CELL PRO - ERP SYSTEM", layout="centered", page_icon="🚀")
 
-# --- CUSTOM CSS TAMPILAN MODERN ---
+# --- CUSTOM CSS TAMPILAN MODERN & WARNA TAB SENADA ---
 st.markdown("""
     <style>
     .main { background-color: #f8f9fa; }
+    
+    /* Mengubah warna kursor/garis bawah & teks tab aktif agar senada dengan #00b4d8 */
+    .stTabs [data-baseweb="tab-list"] button[aria-selected="true"] {
+        color: #00b4d8 !important;
+        border-bottom-color: #00b4d8 !important;
+    }
+    .stTabs [data-baseweb="tab-list"] button:hover {
+        color: #00b4d8 !important;
+    }
+
     .metric-card-blue {
         background-color: #ffffff; padding: 20px; border-radius: 12px;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.05); margin-bottom: 15px; border-left: 5px solid #1f77b4;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.05); margin-bottom: 15px; border-left: 5px solid #00b4d8;
     }
     .metric-card-green {
         background-color: #ffffff; padding: 20px; border-radius: 12px;
@@ -60,12 +70,8 @@ if 'nama_barang_ditemukan' not in st.session_state: st.session_state['nama_baran
 if 'baris_stok_ditemukan' not in st.session_state: st.session_state['baris_stok_ditemukan'] = None
 if 'profit_barang_ini' not in st.session_state: st.session_state['profit_barang_ini'] = 0
 
-st.title("🚀 RABAY CELL PRO")
+st.markdown("<h3 style='color:#00b4d8; margin:0;'>RABAY CELL</h3>", unsafe_allow_html=True)
 st.caption("Sistem Kasir & Manajemen Stok Konter Profesional")
-
-with st.expander("💰 Atur Modal Awal Hari Ini"):
-    st.session_state['modal_cash'] = st.number_input("Cash di Laci (Rp):", value=st.session_state['modal_cash'], step=50000)
-    st.session_state['modal_digi'] = st.number_input("Saldo Digital (Rp):", value=st.session_state['modal_digi'], step=50000)
 
 def hitung_admin(nominal, jenis):
     if jenis == "E-Wallet" and nominal <= 1500000:
@@ -146,7 +152,6 @@ with tab1:
                 except: pass
 
         st.markdown("---")
-        # Ditambahkan pilihan "Transaksi Lainnya"
         pilihan_jenis = ["Bank", "E-Wallet", "Tarik Tunai", "Penjualan Barang", "Transaksi Lainnya"]
         current_idx = pilihan_jenis.index(st.session_state['input_jenis']) if st.session_state['input_jenis'] in pilihan_jenis else 0
         
@@ -155,10 +160,8 @@ with tab1:
         if st.session_state['nama_barang_ditemukan'] and st.session_state['input_jenis'] == "Penjualan Barang":
             st.success(f"📦 Barang Terdeteksi: **{st.session_state['nama_barang_ditemukan']}** | Estimasi Untung: **Rp {st.session_state['profit_barang_ini']:,}**")
 
-        # Input nominal/harga
         nominal_trx = st.number_input("Nominal / Harga (Rp):", value=st.session_state['input_nominal'], step=10000)
         
-        # Jika memilih Transaksi Lainnya, beri tambahan input keuntungan manual
         profit_manual = 0
         if st.session_state['input_jenis'] == "Transaksi Lainnya":
             profit_manual = st.number_input("Keuntungan / Cuan Manual (Rp):", value=0, step=1000)
@@ -371,13 +374,20 @@ with tab3:
 with tab4:
     st.subheader("📊 Dashboard Keuangan & Profit")
     
+    # --- PENGATURAN MODAL AWAL DIPINDAHKAN KE DASHBOARD ---
+    with st.expander("💰 Atur Modal Awal Hari Ini", expanded=False):
+        st.session_state['modal_cash'] = st.number_input("Cash di Laci (Rp):", value=st.session_state['modal_cash'], step=50000)
+        st.session_state['modal_digi'] = st.number_input("Saldo Digital (Rp):", value=st.session_state['modal_digi'], step=50000)
+
+    st.markdown("---")
+
     st.markdown(f"""
         <div class="metric-card-blue">
-            <h4 style="margin:0; color:#1f77b4;">💵 Cash di Laci</h4>
+            <h4 style="margin:0; color:#00b4d8;">💵 Cash di Laci</h4>
             <h2 style="margin:5px 0 0 0; color:#333;">Rp {st.session_state['modal_cash']:,}</h2>
         </div>
         <div class="metric-card-blue">
-            <h4 style="margin:0; color:#1f77b4;">💳 Saldo Digital</h4>
+            <h4 style="margin:0; color:#00b4d8;">💳 Saldo Digital</h4>
             <h2 style="margin:5px 0 0 0; color:#333;">Rp {st.session_state['modal_digi']:,}</h2>
         </div>
     """, unsafe_allow_html=True)
