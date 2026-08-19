@@ -290,40 +290,38 @@ with tab2:
         else:
             st.info("Belum ada data stok.")
 
-# --- TAB 3: RIWAYAT TRANSAKSI DENGAN FILTER JENIS & TANGGAL ---
+# --- TAB 3: RIWAYAT TRANSAKSI DENGAN INDeks AMAN ---
 with tab3:
     st.subheader("📋 Kelola & Filter Riwayat Transaksi")
     if ws_t:
         data_t = ws_t.get_all_values()
         if len(data_t) > 1:
+            # Gunakan baris pertama sebagai header, ambil data secara aman
             df_t = pd.DataFrame(data_t[1:], columns=data_t[0])
             df_t['No_Baris'] = range(2, len(df_t) + 2)
             
-            # Ubah kolom waktu menjadi format tanggal untuk keperluan filter
-            df_t['Tanggal_Saja'] = pd.to_datetime(df_t['Waktu'], errors='coerce').dt.date
+            # Ambil kolom pertama (indeks 0) sebagai tanggal/waktu tanpa tergantung nama header
+            df_t['Tanggal_Saja'] = pd.to_datetime(df_t.iloc[:, 0], errors='coerce').dt.date
             
-            # --- FITUR FILTER ---
             st.write("### 🔍 Filter Tampilan")
             col_f1, col_f2 = st.columns(2)
             
             with col_f1:
-                # Filter Berdasarkan Jenis Transaksi
-                jenis_tersedia = ["Semua"] + df_t['Jenis'].unique().tolist()
+                # Filter Jenis (menggunakan kolom indeks ke-1 yaitu Jenis)
+                kolom_jenis = df_t.columns[1] if len(df_t.columns) > 1 else 'Jenis'
+                jenis_tersedia = ["Semua"] + df_t[kolom_jenis].unique().tolist()
                 pilih_filter_jenis = st.selectbox("Filter Jenis Transaksi:", options=jenis_tersedia)
                 
             with col_f2:
-                # Filter Berdasarkan Tanggal
                 tanggal_tersedia = sorted(df_t['Tanggal_Saja'].dropna().unique(), reverse=True)
                 pilih_filter_tgl = st.selectbox("Filter Tanggal:", options=["Semua Tanggal"] + [str(t) for t in tanggal_tersedia])
             
-            # Terapkan Filter ke Dataframe
             df_t_filtered = df_t.copy()
             if pilih_filter_jenis != "Semua":
-                df_t_filtered = df_t_filtered[df_t_filtered['Jenis'] == pilih_filter_jenis]
+                df_t_filtered = df_t_filtered[df_t_filtered[kolom_jenis] == pilih_filter_jenis]
             if pilih_filter_tgl != "Semua Tanggal":
                 df_t_filtered = df_t_filtered[df_t_filtered['Tanggal_Saja'].astype(str) == pilih_filter_tgl]
                 
-            # Sembunyikan kolom bantu 'Tanggal_Saja' sebelum ditampilkan ke tabel
             df_t_display = df_t_filtered.drop(columns=['Tanggal_Saja'])
             
             st.markdown("---")
@@ -343,6 +341,7 @@ with tab3:
         else:
             st.info("Belum ada riwayat transaksi.")
 
+# --- TAB 4: DASHBOARD & PROFIT AMAN ---
 with tab4:
     st.subheader("📊 Keuangan, Rekap & Grafik Profit")
     c1, c2 = st.columns(2)
