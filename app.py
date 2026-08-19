@@ -23,25 +23,23 @@ st.markdown("""
         background-color: #14B8A6;
         padding: 15px 20px;
         display: flex;
-        justify-content: space-between;
+        justify-content: flex-start;
         align-items: center;
         margin-top: -60px;
         margin-bottom: 15px;
         margin-left: -1rem;
         margin-right: -1rem;
     }
-    .rabay-header h1 { color: white; margin: 0; font-size: 26px; font-weight: 800; font-family: sans-serif; }
-    .rabay-header h3 { color: white; margin: 0; font-size: 16px; font-weight: 600; font-family: sans-serif; }
+    .rabay-header h1 { color: white; margin: 0; font-size: 28px; font-weight: 800; font-family: sans-serif; letter-spacing: 1px;}
     
-    /* Styling Tabs Ala Tombol Outline */
+    /* Styling Tabs */
     .stTabs [data-baseweb="tab-list"] {
         gap: 10px;
         background-color: transparent;
     }
     .stTabs [data-baseweb="tab"] {
-        border: 2px solid #14B8A6 !important;
-        border-radius: 8px !important;
-        color: white !important;
+        border-radius: 4px !important;
+        color: #cccccc !important;
         background-color: transparent !important;
         padding: 10px 15px !important;
         font-weight: 600 !important;
@@ -49,28 +47,28 @@ st.markdown("""
     .stTabs [aria-selected="true"] {
         background-color: #14B8A6 !important;
         color: white !important;
-        border: 2px solid #14B8A6 !important;
     }
     
     /* Styling Input Box & Container */
     div[data-baseweb="input"] {
         background-color: #1E1E1E !important;
         border-radius: 8px !important;
-        border: 1px solid #333 !important;
+        border: 1px solid #14B8A6 !important;
     }
-    input { color: #14B8A6 !important; font-weight: bold !important; text-align: center !important;}
+    input { color: #14B8A6 !important; font-weight: bold !important; text-align: center !important; font-size: 18px !important;}
     
     /* Barcode Box Area */
     .barcode-box {
-        border: 1px solid #14B8A6;
-        border-radius: 12px;
-        padding: 15px;
         margin-bottom: 20px;
-        background-color: #0a0a0a;
+        margin-top: 10px;
     }
     
-    /* Sembunyikan Label Label Default */
+    /* Sembunyikan Label Default */
     label, .stRadio label { color: #cccccc !important; }
+    
+    /* Kartu Metrik Dashboard (Dark Mode) */
+    .metric-card-blue { background-color: #1E1E1E; padding: 20px; border-radius: 12px; border-left: 5px solid #14B8A6; margin-bottom: 15px; }
+    .metric-card-green { background-color: #1E1E1E; padding: 20px; border-radius: 12px; border-left: 5px solid #2ca02c; margin-bottom: 15px; }
     
     </style>
 """, unsafe_allow_html=True)
@@ -170,44 +168,22 @@ def hitung_admin(nominal, jenis):
         elif nominal <= 10000000: return 35000
         else: return 35000 + (-(-(nominal - 10000000) // 5000000) * 5000)
 
-# --- HEADER CUSTOM UI (Sesuai Gambar) ---
+# --- HEADER CUSTOM UI ---
 st.markdown("""
     <div class="rabay-header">
         <h1>RABAY CELL</h1>
-        <h3>STOK BARANG &nbsp;></h3>
     </div>
 """, unsafe_allow_html=True)
 
-# --- BAGIAN INPUT MODAL (Sesuai Gambar) ---
-col_m1, col_m2 = st.columns(2)
-with col_m1:
-    st.markdown("<p style='text-align:center; color:#ccc; margin-bottom:2px; font-size:14px;'>Modal Cash :</p>", unsafe_allow_html=True)
-    st.session_state['modal_cash'] = st.number_input("Modal Cash", value=st.session_state['modal_cash'], step=50000, label_visibility="collapsed")
-with col_m2:
-    st.markdown("<p style='text-align:center; color:#ccc; margin-bottom:2px; font-size:14px;'>Modal SALDO :</p>", unsafe_allow_html=True)
-    st.session_state['modal_digi'] = st.number_input("Modal Saldo", value=st.session_state['modal_digi'], step=50000, label_visibility="collapsed")
-    
-# Jika modal diubah, langsung sync ke database
-if st.button("🔄 Sync Modal (Update Data)", use_container_width=True):
-    update_kas_db()
-    st.success("Modal tersimpan ke database!")
-
-st.markdown("<br>", unsafe_allow_html=True)
-
 # --- TAB NAVIGASI ---
-tab1, tab2, tab3, tab4 = st.tabs(["TRANSAKSI", "RIWAYAT", "DASHBOARD", "STOK/TOOLS"])
+tab1, tab2, tab3, tab4 = st.tabs(["TRANSAKSI", "RIWAYAT", "DASHBOARD", "STOK BARANG"])
 
 with tab1:
     metode = st.radio("Metode Input:", ["Ketik Manual / Barcode", "AI Scan Mutasi Foto"], horizontal=True, label_visibility="collapsed")
     
     if metode == "Ketik Manual / Barcode":
-        # Desain Box Barcode Khusus
         st.markdown('<div class="barcode-box">', unsafe_allow_html=True)
-        col_b1, col_b2 = st.columns([5, 1])
-        with col_b1:
-            quick = st.text_input("INPUT KODE CEPAT/BARCODE", placeholder="Klik di sini, lalu scan barcode...", label_visibility="collapsed")
-        with col_b2:
-            st.button("📷", use_container_width=True, help="Mode Kamera/Scanner")
+        quick = st.text_input("INPUT KODE CEPAT/BARCODE", placeholder="Ketik kode cepat / barcode", label_visibility="collapsed")
         st.markdown('</div>', unsafe_allow_html=True)
         
         nama_brg_det = ""
@@ -446,6 +422,32 @@ with tab2:
 
 # --- TAB 3: DASHBOARD ---
 with tab3:
+    with st.expander("💰 Setel Ulang Modal / Buka Kasir", expanded=False):
+        input_cash_baru = st.number_input("Setel Cash di Laci (Rp):", value=st.session_state['modal_cash'], step=50000)
+        if input_cash_baru > 0: st.caption(f"👀 Terbaca: **{f_uang(input_cash_baru)}**")
+            
+        input_digi_baru = st.number_input("Setel Saldo Digital (Rp):", value=st.session_state['modal_digi'], step=50000)
+        if input_digi_baru > 0: st.caption(f"👀 Terbaca: **{f_uang(input_digi_baru)}**")
+            
+        if st.button("💾 Simpan Modal Baru", type="primary", use_container_width=True):
+            st.session_state['modal_cash'] = input_cash_baru
+            st.session_state['modal_digi'] = input_digi_baru
+            waktu = datetime.now(pytz.timezone('Asia/Jakarta')).strftime("%Y-%m-%d %H:%M:%S")
+            if ws_k: ws_k.append_row([waktu, input_cash_baru, input_digi_baru]) 
+            st.success("Modal awal diperbarui!")
+            st.rerun()
+
+    st.markdown(f"""
+        <div class="metric-card-blue">
+            <h4 style="margin:0; color:#14B8A6;">💵 Cash di Laci</h4>
+            <h2 style="margin:5px 0 0 0; color:#fff;">{f_uang(st.session_state['modal_cash'])}</h2>
+        </div>
+        <div class="metric-card-blue">
+            <h4 style="margin:0; color:#14B8A6;">💳 Saldo Digital</h4>
+            <h2 style="margin:5px 0 0 0; color:#fff;">{f_uang(st.session_state['modal_digi'])}</h2>
+        </div>
+    """, unsafe_allow_html=True)
+
     profit_hari_ini = 0
     if ws_t:
         data_t = ws_t.get_all_values()
@@ -460,9 +462,9 @@ with tab3:
                     profit_hari_ini = df_hari_ini['Profit_Val'].sum()
 
     st.markdown(f"""
-        <div class="barcode-box" style="text-align:center; border-color:#2ca02c;">
-            <h4 style="margin:0; color:#ccc;">🔥 Profit Hari Ini</h4>
-            <h1 style="margin:5px 0 0 0; color:#14B8A6;">{f_uang(profit_hari_ini)}</h1>
+        <div class="metric-card-green">
+            <h4 style="margin:0; color:#2ca02c;">🔥 Profit Hari Ini</h4>
+            <h1 style="margin:5px 0 0 0; color:#fff;">{f_uang(profit_hari_ini)}</h1>
         </div>
     """, unsafe_allow_html=True)
     
