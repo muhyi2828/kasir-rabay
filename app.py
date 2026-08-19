@@ -11,23 +11,26 @@ import pytz
 
 st.set_page_config(page_title="RABAY CELL PRO", layout="centered", page_icon="🚀")
 
-# --- CUSTOM CSS UNTUK MEMAKSA ELEMEN SEJAJAR DI HP ---
+# --- CSS KHUSUS UNTUK MEMAKSA SEJAJAR DI HP (FLEXBOX) ---
 st.markdown("""
     <style>
     .main { background-color: #0e1117; color: #ffffff; }
     
-    /* Memaksa kontainer agar sejajar ke samping tanpa turun ke bawah */
-    .row-flex {
+    /* Membungkus Header agar benar-benar sejajar kiri dan kanan */
+    .top-header {
         display: flex;
-        flex-direction: row;
         justify-content: space-between;
         align-items: center;
-        gap: 10px;
         width: 100%;
-        margin-bottom: 10px;
+        margin-bottom: 5px;
     }
-    .flex-item {
-        flex: 1;
+    
+    /* Membungkus Input Kode & Kamera agar sejajar */
+    .input-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        width: 100%;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -103,19 +106,16 @@ def hitung_admin(nominal, jenis):
             kelipatan = -(-sisa // 5000000)
             return 35000 + (kelipatan * 5000)
 
-# --- 1. HEADER ATAS: RABAY CELL & TOMBOL STOK BARANG SEJAJAR ---
-st.markdown("""
-    <div class="row-flex" style="margin-bottom: 5px;">
-        <div style="flex: 1.5;"><h3 style="color:#00b4d8; margin:0;">RABAY CELL</h3></div>
-""", unsafe_allow_html=True)
+# --- HEADER: RABAY CELL (KIRI) & STOK BARANG (KANAN ATAS) ---
+c_head1, c_head2 = st.columns([1.2, 1])
+with c_head1:
+    st.markdown("<h2 style='color:#00b4d8; margin:0; line-height:1.5;'>RABAY CELL</h2>", unsafe_allow_html=True)
+with c_head2:
+    if st.button("📦 STOK BARANG", use_container_width=True, type="secondary"):
+        st.session_state['menu_aktif'] = "Stok Barang"
+        st.rerun()
 
-if st.button("📦 STOK BARANG", type="secondary"):
-    st.session_state['menu_aktif'] = "Stok Barang"
-    st.rerun()
-
-st.markdown("</div>", unsafe_allow_html=True)
-
-# --- 2. MODAL CASH & SALDO DIGITAL SEJAJAR ---
+# --- MODAL CASH & SALDO DIGITAL DI BAWAHNYA ---
 col_m1, col_m2 = st.columns(2)
 with col_m1:
     st.markdown("<p style='font-size:11px; color:#aaa; margin:0;'>Modal Cash:</p>", unsafe_allow_html=True)
@@ -126,7 +126,7 @@ with col_m2:
 
 st.markdown("<div style='margin: 5px 0;'></div>", unsafe_allow_html=True)
 
-# --- 3. MENU UTAMA: TRANSAKSI, RIWAYAT, DASHBOARD SEJAJAR ---
+# --- MENU UTAMA (TRANSAKSI, RIWAYAT, DASHBOARD) ---
 nav1, nav2, nav3 = st.columns(3)
 with nav1:
     if st.button("⚡ TRANSAKSI", use_container_width=True, type="primary" if st.session_state['menu_aktif']=="Transaksi" else "secondary"):
@@ -146,7 +146,7 @@ st.markdown("---")
 # ==================== KONTROL MENU: TRANSAKSI ====================
 if st.session_state['menu_aktif'] == "Transaksi":
     
-    # --- 4. INPUT KODE CEPAT & TOMBOL KAMERA OCR DI SEBELAH KANANNYA ---
+    # --- INPUT KODE CEPAT & TOMBOL KAMERA OCR DI SEBELAH KANANNYA (CUSTOM HTML WRAPPER) ---
     col_inp1, col_inp2 = st.columns([5, 1])
     
     with col_inp1:
