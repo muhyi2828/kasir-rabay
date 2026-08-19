@@ -39,7 +39,7 @@ with st.expander("💰 Modal Awal Hari Ini"):
     st.session_state['modal_cash'] = st.number_input("Cash di Laci (Rp):", value=st.session_state['modal_cash'], step=50000)
     st.session_state['modal_digi'] = st.number_input("Saldo Digital (Rp):", value=st.session_state['modal_digi'], step=50000)
 
-# 4. FUNGSI HITUNG ADMIN SESUAI TABEL RESMI BOS
+# 4. FUNGSI HITUNG ADMIN
 def hitung_admin(nominal, jenis):
     if jenis == "E-Wallet" and nominal <= 1500000:
         if nominal <= 98000: return 2000
@@ -62,7 +62,7 @@ def hitung_admin(nominal, jenis):
             sisa = nominal - 20000000
             kelipatan = -(-sisa // 5000000)
             return 35000 + (kelipatan * 5000)
-    else: # Tarif Bank / Transfer standar
+    else: 
         if nominal <= 98000: return 3000
         elif nominal <= 400000: return 5000
         elif nominal <= 700000: return 8000
@@ -78,7 +78,7 @@ def hitung_admin(nominal, jenis):
             kelipatan = -(-sisa // 5000000)
             return 35000 + (kelipatan * 5000)
 
-tab1, tab2 = st.tabs(["⚡ Input Transaksi", "📊 Dashboard & Rekap Kas"])
+tab1, tab2, tab3 = st.tabs(["⚡ Input Transaksi", "📋 Riwayat Transaksi", "📊 Dashboard & Grafik"])
 
 with tab1:
     st.subheader("Pilih Metode Input")
@@ -127,7 +127,7 @@ with tab1:
                 st.session_state['input_nominal'] = 0
                 st.rerun()
 
-    else: # Mode Scan Foto Mutasi
+    else: 
         sumber_gambar = st.file_uploader("Upload Screenshot Mutasi:", type=["jpg", "jpeg", "png"])
         if sumber_gambar and st.button("🔍 Pindai Gambar dengan AI", use_container_width=True):
             try:
@@ -165,7 +165,33 @@ with tab1:
                 st.success("Semua data berhasil disimpan & kas terupdate!")
                 st.rerun()
 
+# TAB BARU: MANAJEMEN RIWAYAT TRANSAKSI (HAPUS & EDIT)
 with tab2:
+    st.subheader("📋 Kelola Riwayat Transaksi Terakhir")
+    if ws_t:
+        data_t = ws_t.get_all_values()
+        if len(data_t) > 1:
+            df_t = pd.DataFrame(data_t[1:], columns=data_t[0])
+            # Tambahkan nomor baris asli di Google Sheets (Baris 2 adalah index 0 di dataframe, maka baris sheet = index + 2)
+            df_t['No_Baris'] = range(2, len(df_t) + 2)
+            
+            st.dataframe(df_t, use_container_width=True)
+            
+            st.markdown("---")
+            st.write("### 🗑️ Hapus Transaksi Salah")
+            baris_hapus = st.number_input("Masukkan Nomor Baris yang ingin dihapus:", min_value=2, max_value=len(df_t)+1, step=1)
+            
+            if st.button("❌ Hapus Baris Terpilih dari Database", type="primary"):
+                try:
+                    ws_t.delete_rows(int(baris_hapus))
+                    st.success(f"Berhasil menghapus baris ke-{baris_hapus} dari Google Sheets!")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Gagal menghapus: {e}")
+        else:
+            st.info("Belum ada riwayat transaksi tersimpan.")
+
+with tab3:
     st.subheader("📊 Posisi Keuangan & Grafik Bulanan")
     
     c1, c2 = st.columns(2)
@@ -198,4 +224,4 @@ with tab2:
                           title=f"Grafik Perkembangan Kas - {bulan_pilih}")
             st.plotly_chart(fig, use_container_width=True)
         else:
-            st.info("Belum ada data rekap di Google Sheets. Klik tombol simpan rekap di atas untuk mulai mencatat.")
+            st.info("Belum ada data rekap di Google Sheets.")
