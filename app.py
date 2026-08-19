@@ -35,6 +35,14 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
+# --- FUNGSI FORMAT UANG (TITIK SEBAGAI PEMISAH RIBUAN) ---
+def f_uang(val):
+    try:
+        val_int = int(val)
+        return f"Rp {val_int:,}".replace(",", ".")
+    except:
+        return str(val)
+
 @st.cache_resource
 def konek_gsheets():
     try:
@@ -157,38 +165,42 @@ with tab1:
         jenis_terpilih = st.radio("Jenis Transaksi:", pilihan_jenis, index=current_idx, horizontal=True)
         
         if nama_brg_det and jenis_terpilih == "Penjualan Barang":
-            st.success(f"📦 Barang Terdeteksi: **{nama_brg_det}** | Estimasi Untung: **Rp {profit_brg_det:,}**")
+            st.success(f"📦 Barang Terdeteksi: **{nama_brg_det}** | Estimasi Untung: **{f_uang(profit_brg_det)}**")
 
         nominal_trx = st.number_input("Nominal / Harga (Rp):", value=nominal_val, step=10000)
+        if nominal_trx > 0:
+            st.caption(f"👀 Terbaca: **{f_uang(nominal_trx)}**")
         
         profit_manual = 0
         if jenis_terpilih == "Transaksi Lainnya":
             profit_manual = st.number_input("Keuntungan / Cuan Manual (Rp):", value=0, step=1000)
+            if profit_manual > 0:
+                st.caption(f"👀 Cuan Terbaca: **{f_uang(profit_manual)}**")
 
         if nominal_trx > 0 or (jenis_terpilih == "Transaksi Lainnya" and nominal_trx >= 0):
             if jenis_terpilih == "Penjualan Barang":
                 admin = 0
                 total_uang = nominal_trx
                 profit_bersih = profit_brg_det if profit_brg_det > 0 else 0
-                st.info(f"🛒 **Penjualan Barang Fisik**\n- Uang Masuk Cash: **Rp {total_uang:,}**\n- Perkiraan Untung: **Rp {profit_bersih:,}**")
+                st.info(f"🛒 **Penjualan Barang Fisik**\n- Uang Masuk Cash: **{f_uang(total_uang)}**\n- Perkiraan Untung: **{f_uang(profit_bersih)}**")
             elif jenis_terpilih == "Transaksi Lainnya":
                 admin = 0
                 total_uang = nominal_trx
                 profit_bersih = profit_manual
-                st.info(f"💼 **Transaksi Lainnya (Jasa/Servis/Lainnya)**\n- Uang Masuk Cash: **Rp {total_uang:,}**\n- Keuntungan Manual: **Rp {profit_bersih:,}**")
+                st.info(f"💼 **Transaksi Lainnya (Jasa/Servis/Lainnya)**\n- Uang Masuk Cash: **{f_uang(total_uang)}**\n- Keuntungan Manual: **{f_uang(profit_bersih)}**")
             else:
                 admin = hitung_admin(nominal_trx, jenis_terpilih)
                 total_uang = nominal_trx + admin if jenis_terpilih != "Tarik Tunai" else nominal_trx - admin
                 profit_bersih = admin
                 
                 c1, c2 = st.columns(2)
-                c1.metric("Nominal", f"Rp {nominal_trx:,}")
-                c2.metric("Admin (Cuan)", f"Rp {admin:,}")
+                c1.metric("Nominal", f"{f_uang(nominal_trx)}")
+                c2.metric("Admin (Cuan)", f"{f_uang(admin)}")
                 
                 if jenis_terpilih == "Tarik Tunai":
-                    st.info(f"💵 Uang Tunai Diberikan ke Pelanggan: **Rp {total_uang:,}**")
+                    st.info(f"💵 Uang Tunai Diberikan ke Pelanggan: **{f_uang(total_uang)}**")
                 else:
-                    st.success(f"💰 Total Tagihan Pelanggan: **Rp {total_uang:,}**")
+                    st.success(f"💰 Total Tagihan Pelanggan: **{f_uang(total_uang)}**")
             
             col_b1, col_b2 = st.columns(2)
             
@@ -231,12 +243,18 @@ with tab1:
         if st.session_state['keranjang_belanja']:
             st.markdown("---")
             st.write("### 🛒 Daftar Keranjang Belanjaan Aktif")
-            df_cart = pd.DataFrame(st.session_state['keranjang_belanja'])
-            st.dataframe(df_cart[['Jenis', 'Nama', 'Nominal', 'Total']], use_container_width=True, hide_index=True)
             
-            total_semua_belanja = df_cart['Total'].sum()
-            total_semua_profit = df_cart['Admin/Profit'].sum()
-            st.info(f"💵 **Total Tagihan Keranjang: Rp {total_semua_belanja:,}** | Perkiraan Total Profit: **Rp {total_semua_profit:,}**")
+            # Format dataframe keranjang agar angka nominalnya cantik
+            df_cart_raw = pd.DataFrame(st.session_state['keranjang_belanja'])
+            df_cart_display = df_cart_raw.copy()
+            df_cart_display['Nominal'] = df_cart_display['Nominal'].apply(lambda x: f_uang(x))
+            df_cart_display['Total'] = df_cart_display['Total'].apply(lambda x: f_uang(x))
+            
+            st.dataframe(df_cart_display[['Jenis', 'Nama', 'Nominal', 'Total']], use_container_width=True, hide_index=True)
+            
+            total_semua_belanja = df_cart_raw['Total'].sum()
+            total_semua_profit = df_cart_raw['Admin/Profit'].sum()
+            st.info(f"💵 **Total Tagihan Keranjang: {f_uang(total_semua_belanja)}** | Perkiraan Total Profit: **{f_uang(total_semua_profit)}**")
             
             col_c1, col_c2 = st.columns(2)
             if col_c1.button("🚀 Proses & Simpan Semua Keranjang", type="primary", use_container_width=True):
@@ -307,8 +325,11 @@ with tab1:
             jumlah_draf = len(st.session_state['draf_scan_smart'])
             st.info(f"✨ Berhasil mendeteksi {jumlah_draf} transaksi dari gambar:")
             
-            df_preview = pd.DataFrame(st.session_state['draf_scan_smart'])
-            st.dataframe(df_preview, use_container_width=True, hide_index=True)
+            # Format preview hasil scan agar nominalnya rapi beritik
+            df_preview_raw = pd.DataFrame(st.session_state['draf_scan_smart'])
+            df_preview_disp = df_preview_raw.copy()
+            df_preview_disp['Nominal (Rp)'] = df_preview_disp['Nominal (Rp)'].apply(lambda x: f_uang(x))
+            st.dataframe(df_preview_disp, use_container_width=True, hide_index=True)
             
             if st.button("💾 Simpan Semua ke Database & Perbarui Kas", type="primary", use_container_width=True):
                 waktu = datetime.now(pytz.timezone('Asia/Jakarta')).strftime("%Y-%m-%d %H:%M:%S")
@@ -363,6 +384,11 @@ with tab2:
                 
             df_t_display = df_t_filtered.drop(columns=['Tanggal_Saja'])
             
+            # Format kolom angka riwayat agar pakai titik ribuan
+            for c_nm in ['Nominal', 'Admin', 'Total', 'Profit']:
+                if c_nm in df_t_display.columns:
+                    df_t_display[c_nm] = df_t_display[c_nm].apply(lambda x: f_uang(x) if str(x).isdigit() else x)
+            
             st.markdown("---")
             st.dataframe(df_t_display, use_container_width=True)
             
@@ -386,18 +412,23 @@ with tab3:
     
     with st.expander("💰 Atur Modal Awal Hari Ini", expanded=False):
         st.session_state['modal_cash'] = st.number_input("Cash di Laci (Rp):", value=st.session_state['modal_cash'], step=50000)
+        if st.session_state['modal_cash'] > 0:
+            st.caption(f"👀 Cash Terbaca: **{f_uang(st.session_state['modal_cash'])}**")
+            
         st.session_state['modal_digi'] = st.number_input("Saldo Digital (Rp):", value=st.session_state['modal_digi'], step=50000)
+        if st.session_state['modal_digi'] > 0:
+            st.caption(f"👀 Saldo Terbaca: **{f_uang(st.session_state['modal_digi'])}**")
 
     st.markdown("---")
 
     st.markdown(f"""
         <div class="metric-card-blue">
             <h4 style="margin:0; color:#1f77b4;">💵 Cash di Laci</h4>
-            <h2 style="margin:5px 0 0 0; color:#333;">Rp {st.session_state['modal_cash']:,}</h2>
+            <h2 style="margin:5px 0 0 0; color:#333;">{f_uang(st.session_state['modal_cash'])}</h2>
         </div>
         <div class="metric-card-blue">
             <h4 style="margin:0; color:#1f77b4;">💳 Saldo Digital</h4>
-            <h2 style="margin:5px 0 0 0; color:#333;">Rp {st.session_state['modal_digi']:,}</h2>
+            <h2 style="margin:5px 0 0 0; color:#333;">{f_uang(st.session_state['modal_digi'])}</h2>
         </div>
     """, unsafe_allow_html=True)
     
@@ -420,7 +451,7 @@ with tab3:
     st.markdown(f"""
         <div class="metric-card-green">
             <h4 style="margin:0; color:#2ca02c;">🔥 Total Keuntungan (Profit) Hari Ini</h4>
-            <h1 style="margin:5px 0 0 0; color:#2ca02c;">Rp {profit_hari_ini:,}</h1>
+            <h1 style="margin:5px 0 0 0; color:#2ca02c;">{f_uang(profit_hari_ini)}</h1>
         </div>
     """, unsafe_allow_html=True)
     
@@ -477,6 +508,13 @@ with tab4:
         if len(data_s) > 1:
             df_s = pd.DataFrame(data_s[1:], columns=data_s[0])
             df_s['No_Baris'] = range(2, len(df_s) + 2)
+            
+            # Format harga modal dan harga jual agar menggunakan titik ribuan di tabel
+            if 'Harga_Modal' in df_s.columns:
+                df_s['Harga_Modal'] = df_s['Harga_Modal'].apply(lambda x: f_uang(x) if str(x).isdigit() else x)
+            if 'Harga_Jual' in df_s.columns:
+                df_s['Harga_Jual'] = df_s['Harga_Jual'].apply(lambda x: f_uang(x) if str(x).isdigit() else x)
+                
             st.dataframe(df_s, use_container_width=True)
             
             st.markdown("---")
