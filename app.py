@@ -11,12 +11,10 @@ import pytz
 
 st.set_page_config(page_title="RABAY CELL PRO - ERP SYSTEM", layout="centered", page_icon="🚀")
 
-# --- CUSTOM CSS TAMPILAN MODERN & WARNA TAB SENADA ---
+# --- CUSTOM CSS TAMPILAN MODERN ---
 st.markdown("""
     <style>
     .main { background-color: #f8f9fa; }
-    
-    /* Mengubah warna kursor/garis bawah & teks tab aktif agar senada dengan #00b4d8 */
     .stTabs [data-baseweb="tab-list"] button[aria-selected="true"] {
         color: #00b4d8 !important;
         border-bottom-color: #00b4d8 !important;
@@ -24,10 +22,9 @@ st.markdown("""
     .stTabs [data-baseweb="tab-list"] button:hover {
         color: #00b4d8 !important;
     }
-
     .metric-card-blue {
         background-color: #ffffff; padding: 20px; border-radius: 12px;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.05); margin-bottom: 15px; border-left: 5px solid #00b4d8;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.05); margin-bottom: 15px; border-left: 5px solid #1f77b4;
     }
     .metric-card-green {
         background-color: #ffffff; padding: 20px; border-radius: 12px;
@@ -69,8 +66,17 @@ if 'draf_scan' not in st.session_state: st.session_state['draf_scan'] = []
 if 'nama_barang_ditemukan' not in st.session_state: st.session_state['nama_barang_ditemukan'] = ""
 if 'baris_stok_ditemukan' not in st.session_state: st.session_state['baris_stok_ditemukan'] = None
 if 'profit_barang_ini' not in st.session_state: st.session_state['profit_barang_ini'] = 0
+if 'active_tab_idx' not in st.session_state: st.session_state['active_tab_idx'] = 0
 
-st.markdown("<h3 style='color:#00b4d8; margin:0;'>RABAY CELL</h3>", unsafe_allow_html=True)
+# --- HEADER ATAS: RABAY CELL (KIRI) & TOMBOL STOK (UJUNG KANAN) ---
+col_h1, col_h2 = st.columns([3.5, 1])
+with col_h1:
+    st.markdown("<h3 style='color:#00b4d8; margin:0; padding-top:5px;'>RABAY CELL</h3>", unsafe_allow_html=True)
+with col_h2:
+    if st.button("📦 STOK BARANG", use_container_width=True):
+        st.session_state['active_tab_idx'] = 1
+        st.rerun()
+
 st.caption("Sistem Kasir & Manajemen Stok Konter Profesional")
 
 def hitung_admin(nominal, jenis):
@@ -374,7 +380,6 @@ with tab3:
 with tab4:
     st.subheader("📊 Dashboard Keuangan & Profit")
     
-    # --- PENGATURAN MODAL AWAL DIPINDAHKAN KE DASHBOARD ---
     with st.expander("💰 Atur Modal Awal Hari Ini", expanded=False):
         st.session_state['modal_cash'] = st.number_input("Cash di Laci (Rp):", value=st.session_state['modal_cash'], step=50000)
         st.session_state['modal_digi'] = st.number_input("Saldo Digital (Rp):", value=st.session_state['modal_digi'], step=50000)
@@ -383,11 +388,11 @@ with tab4:
 
     st.markdown(f"""
         <div class="metric-card-blue">
-            <h4 style="margin:0; color:#00b4d8;">💵 Cash di Laci</h4>
+            <h4 style="margin:0; color:#1f77b4;">💵 Cash di Laci</h4>
             <h2 style="margin:5px 0 0 0; color:#333;">Rp {st.session_state['modal_cash']:,}</h2>
         </div>
         <div class="metric-card-blue">
-            <h4 style="margin:0; color:#00b4d8;">💳 Saldo Digital</h4>
+            <h4 style="margin:0; color:#1f77b4;">💳 Saldo Digital</h4>
             <h2 style="margin:5px 0 0 0; color:#333;">Rp {st.session_state['modal_digi']:,}</h2>
         </div>
     """, unsafe_allow_html=True)
