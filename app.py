@@ -48,7 +48,8 @@ def hitung_admin(nominal, jenis):
 def baca_nominal_ocr(gambar, key):
     client = genai.Client(api_key=key)
     prompt = "Temukan nominal bersih transaksi (jumlah uang utama yang ditransfer/ditopup). HANYA balas dengan angkanya saja secara mentah tanpa spasi, tanpa 'Rp', tanpa titik/koma. Abaikan nomor referensi atau saldo."
-    response = client.models.generate_content(model='gemini-2.5-flash', contents=[gambar, prompt])
+    # NAMA MODEL SUDAH DIPERBARUI DI SINI
+    response = client.models.generate_content(model='gemini-3.6-flash', contents=[gambar, prompt])
     angka_bersih = re.sub(r'\D', '', response.text)
     return int(angka_bersih)
 
