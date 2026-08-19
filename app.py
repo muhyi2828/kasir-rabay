@@ -241,7 +241,6 @@ with tab1:
             st.caption("Keuntungan Manual (Rp):")
             profit_manual = st.number_input("Profit", value=0, step=1000, label_visibility="collapsed")
 
-        # LOGIKA PERHITUNGAN TRANSAKSI (Modal Atas Tetap Utuh, Transaksi Masuk ke Riwayat)
         if nominal_trx > 0 or (jenis_terpilih == "Transaksi Lainnya" and (nominal_trx > 0 or profit_manual > 0)):
             if jenis_terpilih == "Penjualan Barang":
                 admin = 0
@@ -287,7 +286,6 @@ with tab1:
                     st.success("Masuk keranjang!")
                     st.rerun()
 
-        # Fitur Keranjang
         if st.session_state['keranjang_belanja']:
             st.markdown("---")
             st.write("### 🛒 Keranjang Belanjaan")
@@ -359,7 +357,7 @@ with tab1:
                 st.success("Tersimpan!")
                 st.rerun()
 
-# --- TAB 2: RIWAYAT ---
+# --- TAB 2: RIWAYAT (DENGAN KONFIRMASI HAPUS, EDIT, & TOTAL PROFIT FILTER) ---
 with tab2:
     st.subheader("📋 Daftar Riwayat Transaksi")
     if ws_t:
@@ -380,6 +378,27 @@ with tab2:
             if pilih_filter_jenis != "Semua": df_t_filtered = df_t_filtered[df_t_filtered[kolom_jenis] == pilih_filter_jenis]
             if pilih_filter_tgl != "Semua Tanggal": df_t_filtered = df_t_filtered[df_t_filtered['Tanggal_Saja'].astype(str) == pilih_filter_tgl]
             
+            # Hitung Total Profit dari filter yang sedang aktif
+            profit_filter_val = pd.to_numeric(df_t_filtered.iloc[:, 5], errors='coerce').fillna(0).sum() if len(df_t_filtered) > 0 else 0
+            st.markdown(f"""
+                <div style="background-color:#1E1E1E; padding:12px; border-radius:8px; border:1px solid #2ca02c; text-align:center; margin:15px 0;">
+                    <span style="color:#2ca02c; font-size:14px; font-weight:bold;">🔥 TOTAL PROFIT (FILTER AKTIF):</span><br>
+                    <span style="color:#fff; font-size:20px; font-weight:bold;">{f_uang(profit_filter_val)}</span>
+                </div>
+            """, unsafe_allow_html=True)
+            
+            # Tombol Hapus Semua Riwayat dengan Konfirmasi
+            with st.expander("⚠️ Hapus Semua Riwayat Transaksi"):
+                st.warning("PERINGATAN: Seluruh data riwayat transaksi akan dihapus permanen!")
+                konfirm_hapus_semua = st.checkbox("Saya yakin ingin menghapus semua riwayat", key="chk_del_all_trx")
+                if konfirm_hapus_semua:
+                    if st.button("🗑️ Hapus Permanen Semua Riwayat", type="primary"):
+                        # Kosongkan sheet dengan menghapus semua baris kecuali header
+                        ws_t.clear()
+                        ws_t.append_row(data_t[0]) # Kembalikan Header
+                        st.success("Semua riwayat berhasil dihapus!")
+                        st.rerun()
+
             st.markdown("---")
             for index, row in df_t_filtered.iterrows():
                 b_num = int(row['No_Baris'])
@@ -388,18 +407,52 @@ with tab2:
                 nom_trx = f_uang(row.iloc[2]) if str(row.iloc[2]).isdigit() else row.iloc[2]
                 tot_trx = f_uang(row.iloc[4]) if str(row.iloc[4]).isdigit() else row.iloc[4]
                 
-                col_i1, col_i2 = st.columns([4, 1])
-                with col_i1:
-                    st.markdown(f"**{waktu_trx}** | <span style='color:#14B8A6;'>{jns_trx}</span><br>Nominal: {nom_trx} | Total: {tot_trx}", unsafe_allow_html=True)
-                with col_i2:
-                    if st.button("❌ Hapus", key=f"del_row_trx_{b_num}", use_container_width=True):
+                st.markdown(f"**{waktu_trx}** | <span style='color:#14B8A6;'>{jns_trx}</span><br>Nominal: {nom_trx} | Total: {tot_trx}", unsafe_allow_html=True)
+                
+                # TOMBOL KONFIRMASI HAPUS & EDIT
+                col_btn1, col_btn2 = st.columns(2)
+                with col_btn1:
+                    if st.button("❌ Hapus", key=f"del_trx_{b_num}", use_container_width=True):
+                        st.session_state[f"konfirm_trx_{b_num}"] = True
+                with col_btn2:
+                    if st.button("✏️ Edit", key=f"edit_trx_{b_num}", use_container_width=True):
+                        st.session_state[f"mode_edit_trx_{b_num}"] = True
+                
+                # Eksekusi Konfirmasi Hapus
+                if st.session_state.get(f"konfirm_trx_{b_num}", False):
+                    st.error(f"Yakin ingin menghapus baris {b_num}?")
+                    c_y, c_n = st.columns(2)
+                    if c_y.button("Ya, Hapus!", key=f"y_trx_{b_num}", type="primary"):
                         ws_t.delete_rows(b_num)
-                        st.success(f"Baris {b_num} dihapus!")
+                        st.success("Berhasil dihapus!")
+                        st.session_state[f"konfirm_trx_{b_num}"] = False
                         st.rerun()
+                    if c_n.button("Batal", key=f"n_trx_{b_num}"):
+                        st.session_state[f"konfirm_trx_{b_num}"] = False
+                        st.rerun()
+
+                # Eksekusi Edit Riwayat
+                if st.session_state.get(f"mode_edit_trx_{b_num}", False):
+                    with st.form(key=f"form_edit_trx_{b_num}"):
+                        st.write(f"Edit Transaksi Baris {b_num}")
+                        e_waktu = st.text_input("Waktu", value=row.iloc[0])
+                        e_jenis = st.text_input("Jenis", value=row.iloc[1])
+                        e_nom = st.number_input("Nominal", value=int(row.iloc[2]) if str(row.iloc[2]).isdigit() else 0, step=1000)
+                        e_adm = st.number_input("Admin", value=int(row.iloc[3]) if str(row.iloc[3]).isdigit() else 0, step=1000)
+                        e_tot = st.number_input("Total", value=int(row.iloc[4]) if str(row.iloc[4]).isdigit() else 0, step=1000)
+                        e_prof = st.number_input("Profit", value=int(row.iloc[5]) if str(row.iloc[5]).isdigit() else 0, step=1000)
+                        
+                        btn_save_edit = st.form_submit_button("Simpan Perubahan")
+                        if btn_save_edit:
+                            ws_t.update(f"A{b_num}:F{b_num}", [[e_waktu, e_jenis, e_nom, e_adm, e_tot, e_prof]])
+                            st.session_state[f"mode_edit_trx_{b_num}"] = False
+                            st.success("Perubahan disimpan!")
+                            st.rerun()
+
                 st.markdown("<hr style='margin:5px 0; border-color:#333;'>", unsafe_allow_html=True)
         else: st.info("Belum ada riwayat transaksi.")
 
-# --- TAB 3: DASHBOARD & PENGATURAN SALDO ---
+# --- TAB 3: DASHBOARD ---
 with tab3:
     with st.expander("💰 Setel Modal Awal Hari Ini", expanded=False):
         input_cash_baru = st.number_input("Setel Cash di Laci (Rp):", value=st.session_state['modal_cash'], step=50000)
@@ -418,7 +471,6 @@ with tab3:
 
     st.markdown("---")
 
-    # Hitung total transaksi dari database secara otomatis
     tot_transaksi_cash = 0
     tot_transaksi_digi = 0
     profit_hari_ini = 0
@@ -444,15 +496,14 @@ with tab3:
                         elif jns == "Tarik Tunai":
                             tot_transaksi_cash -= tot
                             tot_transaksi_digi += nom
-                        else: # Bank / E-Wallet
+                        else: 
                             tot_transaksi_digi -= nom
                             tot_transaksi_cash += tot
 
-    # Total Keseluruhan (Modal Tetap + Transaksi)
     total_cash_sistem = st.session_state['modal_cash'] + tot_transaksi_cash
     total_digi_sistem = st.session_state['modal_digi'] + tot_transaksi_digi
 
-    # --- KARTU 1: CASH DI LACI ---
+    # Cash di Laci Card
     st.markdown(f"""
         <div class="metric-card-blue">
             <h4 style="margin:0; color:#14B8A6;">💵 Cash di Laci</h4>
@@ -461,9 +512,6 @@ with tab3:
     """, unsafe_allow_html=True)
     
     penyesuaian_cash = st.number_input("Koreksi / Penyesuaian Cash (+ / - Rp):", value=st.session_state['penyesuaian_cash'], step=10000, key="peny_cash")
-    if penyesuaian_cash != 0:
-        st.caption(f"✍️ Koreksi Terbaca: **{f_uang(penyesuaian_cash)}**")
-    
     hasil_akhir_cash = total_cash_sistem + penyesuaian_cash
     st.markdown(f"""
         <div style="background-color:#111; padding:15px; border-radius:8px; border:1px solid #14B8A6; text-align:center; margin-bottom:20px;">
@@ -474,7 +522,7 @@ with tab3:
 
     st.markdown("---")
 
-    # --- KARTU 2: SALDO DIGITAL ---
+    # Saldo Digital Card
     st.markdown(f"""
         <div class="metric-card-blue">
             <h4 style="margin:0; color:#14B8A6;">💳 Saldo Digital</h4>
@@ -483,9 +531,6 @@ with tab3:
     """, unsafe_allow_html=True)
     
     penyesuaian_digi = st.number_input("Koreksi / Penyesuaian Saldo (+ / - Rp):", value=st.session_state['penyesuaian_digi'], step=10000, key="peny_digi")
-    if penyesuaian_digi != 0:
-        st.caption(f"✍️ Koreksi Terbaca: **{f_uang(penyesuaian_digi)}**")
-        
     hasil_akhir_digi = total_digi_sistem + penyesuaian_digi
     st.markdown(f"""
         <div style="background-color:#111; padding:15px; border-radius:8px; border:1px solid #14B8A6; text-align:center; margin-bottom:20px;">
@@ -496,7 +541,6 @@ with tab3:
 
     st.markdown("---")
 
-    # --- KARTU PROFIT HARI INI ---
     st.markdown(f"""
         <div class="metric-card-green">
             <h4 style="margin:0; color:#2ca02c;">🔥 Profit Hari Ini</h4>
@@ -515,7 +559,7 @@ with tab3:
             fig_profit = px.bar(df_profit_harian, x='Tanggal', y='Profit_Val', template="plotly_dark", color_discrete_sequence=['#14B8A6'])
             st.plotly_chart(fig_profit, use_container_width=True)
 
-# --- TAB 4: STOK BARANG ---
+# --- TAB 4: STOK BARANG (DENGAN HARGA MODAL, KONFIRMASI HAPUS, & EDIT) ---
 with tab4:
     with st.expander("➕ Tambah Barang Baru"):
         barcode_input = st.text_input("Nomor Barcode / Label:")
@@ -549,38 +593,50 @@ with tab4:
                 bc = row.iloc[0]
                 nm = row.iloc[1]
                 stk = row.iloc[2]
+                h_modal = f_uang(row.iloc[3]) if str(row.iloc[3]).isdigit() else row.iloc[3]
                 h_jual = f_uang(row.iloc[4]) if str(row.iloc[4]).isdigit() else row.iloc[4]
                 
-                col_s1, col_s2 = st.columns([4, 1])
-                with col_s1:
-                    st.markdown(f"**{nm}** (Stok: <span style='color:#14B8A6;'>{stk}</span>)<br>Harga Jual: {h_jual} | Barcode: {bc}", unsafe_allow_html=True)
-                with col_s2:
-                    if st.button("❌ Hapus", key=f"del_row_stok_{b_stok}", use_container_width=True):
+                st.markdown(f"**{nm}** (Stok: <span style='color:#14B8A6;'>{stk}</span>)<br>Modal: {h_modal} | Jual: {h_jual}<br>Barcode: {bc}", unsafe_allow_html=True)
+                
+                # TOMBOL KONFIRMASI HAPUS & EDIT STOK
+                col_stk1, col_stk2 = st.columns(2)
+                with col_stk1:
+                    if st.button("❌ Hapus", key=f"del_stk_{b_stok}", use_container_width=True):
+                        st.session_state[f"konfirm_stk_{b_stok}"] = True
+                with col_stk2:
+                    if st.button("✏️ Edit", key=f"edit_stok_btn_{b_stok}", use_container_width=True):
+                        st.session_state[f"mode_edit_stk_{b_num}"] = True
+                
+                # Konfirmasi Hapus Stok
+                if st.session_state.get(f"konfirm_stk_{b_stok}", False):
+                    st.error(f"Yakin ingin menghapus {nm}?")
+                    cs_y, cs_n = st.columns(2)
+                    if cs_y.button("Ya, Hapus Stok!", key=f"y_stk_{b_stok}", type="primary"):
                         ws_s.delete_rows(b_stok)
                         st.success("Stok dihapus!")
+                        st.session_state[f"konfirm_stk_{b_stok}"] = False
                         st.rerun()
-                st.markdown("<hr style='margin:5px 0; border-color:#333;'>", unsafe_allow_html=True)
+                    if cs_n.button("Batal", key=f"n_stk_{b_stok}"):
+                        st.session_state[f"konfirm_stk_{b_stok}"] = False
+                        st.rerun()
 
-            st.markdown("---")
-            st.subheader("✏️ Edit Data Stok Barang")
-            pilih_nama_edit = st.selectbox("Pilih Barang yang mau di-edit:", options=["-- Pilih Barang --"] + df_s['Nama_Barang'].tolist())
-            if pilih_nama_edit != "-- Pilih Barang --":
-                match_row = df_s[df_s['Nama_Barang'] == pilih_nama_edit]
-                if not match_row.empty:
-                    pilih_baris_edit = int(match_row.iloc[0]['No_Baris'])
-                    row_data = ws_s.row_values(pilih_baris_edit)
-                    while len(row_data) < 6: row_data.append("")
-                    
-                    edit_barcode = st.text_input("Barcode / Label:", value=row_data[0])
-                    edit_nama = st.text_input("Nama Barang:", value=row_data[1])
-                    edit_stok = st.number_input("Jumlah Stok:", value=int(row_data[2]) if row_data[2].isdigit() else 0, step=1)
-                    edit_modal = st.number_input("Edit Modal (Rp):", value=int(row_data[3]) if row_data[3].isdigit() else 0, step=1000)
-                    edit_jual = st.number_input("Edit Jual (Rp):", value=int(row_data[4]) if row_data[4].isdigit() else 0, step=1000)
-                    edit_kode = st.text_input("Kode Cepat:", value=row_data[5])
-                    
-                    if st.button("🔄 Update Stok", type="primary", use_container_width=True):
-                        ws_s.update(f"A{pilih_baris_edit}:F{pilih_baris_edit}", [[edit_barcode, edit_nama, edit_stok, edit_modal, edit_jual, edit_kode]])
-                        st.success("Updated!")
-                        st.rerun()
+                # Form Edit Stok Langsung di Baris / Expander
+                if st.session_state.get(f"mode_edit_stk_{b_num}", False):
+                    with st.form(key=f"form_edit_stok_{b_stok}"):
+                        st.write(f"Edit Data: {nm}")
+                        es_bc = st.text_input("Barcode", value=row.iloc[0])
+                        es_nm = st.text_input("Nama Barang", value=row.iloc[1])
+                        es_stk = st.number_input("Stok", value=int(row.iloc[2]) if str(row.iloc[2]).isdigit() else 0, step=1)
+                        es_mod = st.number_input("Harga Modal", value=int(row.iloc[3]) if str(row.iloc[3]).isdigit() else 0, step=1000)
+                        es_jul = st.number_input("Harga Jual", value=int(row.iloc[4]) if str(row.iloc[4]).isdigit() else 0, step=1000)
+                        es_kod = st.text_input("Kode Cepat", value=row.iloc[5])
+                        
+                        if st.form_submit_button("Simpan Perubahan Stok"):
+                            ws_s.update(f"A{b_stok}:F{b_stok}", [[es_bc, es_nm, es_stk, es_mod, es_jul, es_kod]])
+                            st.session_state[f"mode_edit_stk_{b_num}"] = False
+                            st.success("Stok diperbarui!")
+                            st.rerun()
+
+                st.markdown("<hr style='margin:5px 0; border-color:#333;'>", unsafe_allow_html=True)
         else:
             st.info("Belum ada data stok.")
