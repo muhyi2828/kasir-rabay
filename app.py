@@ -31,17 +31,12 @@ def konek_gsheets():
 worksheet, pesan_error_db = konek_gsheets()
 
 # Inisialisasi Memori Web
-if 'riwayat' not in st.session_state:
-    st.session_state['riwayat'] = []
-if 'hasil_scan_banyak' not in st.session_state:
-    st.session_state['hasil_scan_banyak'] = []
+if 'riwayat' not in st.session_state: st.session_state['riwayat'] = []
+if 'hasil_scan_banyak' not in st.session_state: st.session_state['hasil_scan_banyak'] = []
 
 st.title("🚀 Kasir RABAY CELL")
-
-if worksheet:
-    st.caption("🟢 Terkoneksi ke Google Sheets")
-else:
-    st.error(f"🔴 Database Terputus! {pesan_error_db}")
+if worksheet: st.caption("🟢 Terkoneksi ke Google Sheets")
+else: st.error(f"🔴 Database Terputus! {pesan_error_db}")
 
 # Fungsi Hitung Admin
 def hitung_admin(nominal, jenis):
@@ -68,119 +63,73 @@ def hitung_admin(nominal, jenis):
             kelipatan = -(-sisa // 5000000)
             return 35000 + (kelipatan * 5000)
 
-# FUNGSI BARU: Baca Banyak Nominal Sekaligus
+# Fungsi OCR Banyak
 def baca_nominal_ocr_banyak(gambar, key):
     client = genai.Client(api_key=key)
-    prompt = """
-    Temukan SEMUA angka nominal transaksi utama (uang masuk/keluar) di gambar riwayat/struk ini. 
-    Abaikan tanggal, jam, atau teks lainnya.
-    HANYA balas dengan angka mentahnya saja, PISAHKAN DENGAN KOMA. 
-    Contoh balasan: 5000000,9000000,4000000,5000000
-    """
+    prompt = "Temukan SEMUA angka nominal transaksi utama. Balas angka mentah dipisah koma (contoh: 5000000,9000000)."
     response = client.models.generate_content(model='gemini-3.6-flash', contents=[gambar, prompt])
-    
-    # Membersihkan balasan AI agar cuma tersisa angka dan koma
     teks_bersih = re.sub(r'[^0-9,]', '', response.text)
-    
-    # Memecah angka berdasarkan koma dan mengubahnya jadi list angka
     if not teks_bersih: return []
     return [int(x) for x in teks_bersih.split(',') if x.isdigit()]
+
+# Fungsi Quick Code
+def parse_quick_code(code):
+    code = code.upper().strip()
+    jenis = "Bank"
+    if code.startswith("EW"): jenis = "E-Wallet"
+    elif code.startswith("TK"): jenis = "Tarik Tunai"
+    angka_str = re.sub(r'[^0-9.]', '', code)
+    try: return int(float(angka_str) * 1000), jenis
+    except: return 0, jenis
 
 tab1, tab2 = st.tabs(["⚡ Input Kasir", "📊 Rekap Harian"])
 
 with tab1:
-    st.subheader("Input Transaksi Baru")
-    sumber_gambar = st.file_uploader("Upload Foto Struk / Screenshot Mutasi:", type=["jpg", "jpeg", "png"])
+    st.subheader("Input Transaksi")
     
-    # Tombol Scan AI
-    if sumber_gambar and api_key:
-        if st.button("🔍 Pindai Gambar dengan AI", use_container_width=True):
-            try:
-                gambar = Image.open(sumber_gambar)
-                st.image(gambar, width=250)
-                with st.spinner("AI sedang mengumpulkan semua angka di gambar..."):
-                    daftar_angka = baca_nominal_ocr_banyak(gambar, api_key)
-                    
-                    if daftar_angka:
-                        st.session_state['hasil_scan_banyak'] = daftar_angka
-                        st.success(f"Berhasil menemukan {len(daftar_angka)} transaksi!")
-                    else:
-                        st.warning("Tidak ada nominal yang terdeteksi.")
-            except Exception as e:
-                st.error(f"Gagal memindai: {e}")
+    # 1. Fitur Quick Code (KEMBALI LAGI!)
+    quick_code = st.text_input("Kode Cepat (Contoh: TF100, EW50, TK200):")
+    if quick_code:
+        nominal, jenis = parse_quick_code(quick_code)
+        if nominal > 0:
+            st.info(f"Terbaca Cepat: **{jenis} - Rp {nominal:,}**")
+            st.session_state['hasil_scan_banyak'] = [nominal]
+            st.session_state['jenis_default'] = jenis
 
-    # Area Pemrosesan Banyak Data
+    # 2. Fitur Scan
+    sumber_gambar = st.file_uploader("Atau Upload Screenshot Mutasi:", type=["jpg", "jpeg", "png"])
+    if sumber_gambar and api_key and st.button("🔍 Pindai Gambar dengan AI"):
+        with st.spinner("AI sedang memproses..."):
+            st.session_state['hasil_scan_banyak'] = baca_nominal_ocr_banyak(sumber_gambar, api_key)
+            st.session_state['jenis_default'] = "Bank"
+
+    # 3. Draf Pemrosesan
     if st.session_state['hasil_scan_banyak']:
         st.markdown("---")
-        st.info("### 📑 Draf Transaksi (Cek Sebelum Disimpan)")
+        jenis_massal = st.radio("Jenis Transaksi:", ["Bank", "E-Wallet", "Tarik Tunai"], 
+                               index=["Bank", "E-Wallet", "Tarik Tunai"].index(st.session_state.get('jenis_default', 'Bank')), horizontal=True)
         
-        jenis_massal = st.radio("Pilih Jenis Transaksi untuk data di bawah ini:", ["Bank", "E-Wallet", "Tarik Tunai"], horizontal=True)
-        
-        # Buat tabel preview sementara
         preview_data = []
-        total_admin_massal = 0
-        
         for nominal in st.session_state['hasil_scan_banyak']:
             admin = hitung_admin(nominal, jenis_massal)
-            total_uang = nominal + admin if jenis_massal != "Tarik Tunai" else nominal - admin
-            total_admin_massal += admin
-            
-            preview_data.append({
-                "Nominal": nominal,
-                "Admin": admin,
-                "Total Uang": total_uang
-            })
+            total = nominal + admin if jenis_massal != "Tarik Tunai" else nominal - admin
+            preview_data.append({"Nominal": nominal, "Admin": admin, "Total Uang": total})
             
         st.dataframe(preview_data, use_container_width=True)
-        st.write(f"**Potensi Keuntungan Admin:** Rp {total_admin_massal:,}")
         
-        c1, c2 = st.columns(2)
-        with c1:
-            if st.button("❌ Batal / Hapus", use_container_width=True):
-                st.session_state['hasil_scan_banyak'] = []
-                st.rerun()
-        with c2:
-            if st.button("💾 Simpan Semua ke Database", type="primary", use_container_width=True):
-                tz = pytz.timezone('Asia/Jakarta')
-                waktu_sekarang = datetime.now(tz).strftime("%Y-%m-%d %H:%M:%S")
-                
-                baris_untuk_gsheets = []
-                
-                for data in preview_data:
-                    # Siapkan data untuk ke Web
-                    st.session_state['riwayat'].append({
-                        "Waktu": waktu_sekarang,
-                        "Jenis": jenis_massal,
-                        "Nominal": data['Nominal'],
-                        "Admin": data['Admin'],
-                        "Total Uang": data['Total Uang']
-                    })
-                    # Siapkan data untuk ke Google Sheets
-                    baris_untuk_gsheets.append([
-                        waktu_sekarang, jenis_massal, data['Nominal'], data['Admin'], data['Total Uang']
-                    ])
-                
-                # Masukkan ke Google Sheets secara massal (sekali kirim)
-                if worksheet:
-                    try:
-                        worksheet.append_rows(baris_untuk_gsheets)
-                        st.toast("✅ Semua data masuk ke Google Sheets!")
-                    except Exception as e:
-                        st.error(f"Gagal simpan ke database: {e}")
-                
-                st.session_state['hasil_scan_banyak'] = []
-                st.success("Selesai! Semua transaksi berhasil diproses.")
-                st.rerun()
+        if st.button("💾 Simpan ke Database", type="primary", use_container_width=True):
+            waktu = datetime.now(pytz.timezone('Asia/Jakarta')).strftime("%Y-%m-%d %H:%M:%S")
+            baris_data = [[waktu, jenis_massal, d['Nominal'], d['Admin'], d['Total Uang']] for d in preview_data]
+            
+            if worksheet: worksheet.append_rows(baris_data)
+            for b in baris_data: st.session_state['riwayat'].append({"Waktu": b[0], "Jenis": b[1], "Nominal": b[2], "Admin": b[3], "Total Uang": b[4]})
+            
+            st.session_state['hasil_scan_banyak'] = []
+            st.success("Berhasil disimpan!")
+            st.rerun()
 
 with tab2:
-    st.subheader("Rekap Sementara Hari Ini")
+    st.subheader("Rekap Hari Ini")
     if st.session_state['riwayat']:
         st.dataframe(st.session_state['riwayat'], use_container_width=True)
-        tot_admin = sum(x['Admin'] for x in st.session_state['riwayat'])
-        st.metric("Total Keuntungan Admin", f"Rp {tot_admin:,}")
-        
-        if st.button("🗑️ Hapus Rekap Web"):
-            st.session_state['riwayat'] = []
-            st.rerun()
-    else:
-        st.info("Belum ada transaksi tersimpan.")
+        if st.button("🗑️ Hapus Rekap"): st.session_state['riwayat'] = []; st.rerun()
