@@ -9,7 +9,52 @@ import json
 from datetime import datetime
 import pytz
 
-st.set_page_config(page_title="RABAY CELL PRO - ERP SYSTEM", layout="centered")
+st.set_page_config(page_title="RABAY CELL PRO - ERP SYSTEM", layout="centered", page_icon="🚀")
+
+# --- CUSTOM CSS UNTUK TAMPILAN MODERN & ELEGAN ---
+st.markdown("""
+    <style>
+    /* Mengatur latar belakang utama & font */
+    .main {
+        background-color: #f8f9fa;
+    }
+    /* Desain Kotak Kartu / Card */
+    .metric-card {
+        background-color: #ffffff;
+        padding: 20px;
+        border-radius: 12px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        margin-bottom: 15px;
+        border-left: 5px solid #ff4b4b;
+    }
+    .metric-card-blue {
+        background-color: #ffffff;
+        padding: 20px;
+        border-radius: 12px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        margin-bottom: 15px;
+        border-left: 5px solid #1f77b4;
+    }
+    .metric-card-green {
+        background-color: #ffffff;
+        padding: 20px;
+        border-radius: 12px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        margin-bottom: 15px;
+        border-left: 5px solid #2ca02c;
+    }
+    /* Mempercantik Judul Header */
+    h1 {
+        color: #1E1E1E;
+        font-weight: 800;
+        letter-spacing: -0.5px;
+    }
+    h3 {
+        color: #333333;
+        font-weight: 600;
+    }
+    </style>
+""", unsafe_allow_html=True)
 
 @st.cache_resource
 def konek_gsheets():
@@ -43,9 +88,11 @@ if 'nama_barang_ditemukan' not in st.session_state: st.session_state['nama_baran
 if 'baris_stok_ditemukan' not in st.session_state: st.session_state['baris_stok_ditemukan'] = None
 if 'profit_barang_ini' not in st.session_state: st.session_state['profit_barang_ini'] = 0
 
-st.title("🚀 RABAY CELL PRO - Kasir & Stok")
+# --- HEADER UTAMA ---
+st.title("🚀 RABAY CELL PRO")
+st.caption("Sistem Kasir & Manajemen Stok Konter Profesional")
 
-with st.expander("💰 Modal Awal Hari Ini"):
+with st.expander("💰 Atur Modal Awal Hari Ini"):
     st.session_state['modal_cash'] = st.number_input("Cash di Laci (Rp):", value=st.session_state['modal_cash'], step=50000)
     st.session_state['modal_digi'] = st.number_input("Saldo Digital (Rp):", value=st.session_state['modal_digi'], step=50000)
 
@@ -90,11 +137,11 @@ def hitung_admin(nominal, jenis):
 tab1, tab2, tab3, tab4 = st.tabs(["⚡ Transaksi", "📦 Stok Barang", "📋 Riwayat", "📊 Dashboard & Untung"])
 
 with tab1:
-    st.subheader("Pilih Metode Input")
-    metode = st.radio("Metode:", ["Ketik Manual / Kode Cepat / Barang", "Scan Foto Mutasi (Banyak)"], horizontal=True)
+    st.subheader("⚡ Input Transaksi Baru")
+    metode = st.radio("Pilih Metode:", ["Ketik Manual / Kode Cepat / Barang", "Scan Foto Mutasi (Banyak)"], horizontal=True)
     
     if metode == "Ketik Manual / Kode Cepat / Barang":
-        quick = st.text_input("Kode Cepat (TF100, EW50, TK200) atau Kode Barang Stok:")
+        quick = st.text_input("🔍 Masukkan Kode Cepat (TF100, EW50, TK200) atau Kode/Barcode Stok:")
         if quick:
             code = quick.upper().strip()
             st.session_state['nama_barang_ditemukan'] = ""
@@ -134,7 +181,7 @@ with tab1:
         st.session_state['input_jenis'] = st.radio("Jenis Transaksi:", pilihan_jenis, index=current_idx, horizontal=True)
         
         if st.session_state['nama_barang_ditemukan'] and st.session_state['input_jenis'] == "Penjualan Barang":
-            st.success(f"📦 Barang: **{st.session_state['nama_barang_ditemukan']}** | Untung: **Rp {st.session_state['profit_barang_ini']:,}**")
+            st.success(f"📦 Barang Terdeteksi: **{st.session_state['nama_barang_ditemukan']}** | Estimasi Untung: **Rp {st.session_state['profit_barang_ini']:,}**")
 
         nominal_trx = st.number_input("Nominal / Harga (Rp):", value=st.session_state['input_nominal'], step=10000)
         
@@ -143,7 +190,7 @@ with tab1:
                 admin = 0
                 total_uang = nominal_trx
                 profit_bersih = st.session_state['profit_barang_ini'] if st.session_state['profit_barang_ini'] > 0 else 0
-                st.info(f"🛒 Jual Barang. Cash Masuk Laci: Rp {total_uang:,} | **Untung: Rp {profit_bersih:,}**")
+                st.info(f"🛒 **Penjualan Barang Fisik**\n- Uang Masuk Cash: **Rp {total_uang:,}**\n- Perkiraan Untung: **Rp {profit_bersih:,}**")
             else:
                 admin = hitung_admin(nominal_trx, st.session_state['input_jenis'])
                 total_uang = nominal_trx + admin if st.session_state['input_jenis'] != "Tarik Tunai" else nominal_trx - admin
@@ -151,14 +198,14 @@ with tab1:
                 
                 c1, c2 = st.columns(2)
                 c1.metric("Nominal", f"Rp {nominal_trx:,}")
-                c2.metric("Admin (Untung)", f"Rp {admin:,}")
+                c2.metric("Admin (Cuan)", f"Rp {admin:,}")
                 
                 if st.session_state['input_jenis'] == "Tarik Tunai":
                     st.info(f"💵 Uang Tunai Diberikan ke Pelanggan: **Rp {total_uang:,}**")
                 else:
                     st.success(f"💰 Total Tagihan Pelanggan: **Rp {total_uang:,}**")
                 
-            if st.button("💾 Simpan & Update Kas / Stok", type="primary", use_container_width=True):
+            if st.button("💾 Simpan & Perbarui Kas / Stok", type="primary", use_container_width=True):
                 waktu = datetime.now(pytz.timezone('Asia/Jakarta')).strftime("%Y-%m-%d %H:%M:%S")
                 
                 if st.session_state['input_jenis'] == "Penjualan Barang":
@@ -176,7 +223,7 @@ with tab1:
                     st.session_state['modal_cash'] += total_uang
                 
                 if ws_t: ws_t.append_row([waktu, st.session_state['input_jenis'], nominal_trx, admin, total_uang, profit_bersih])
-                st.success("✅ Berhasil! Kas, Stok, dan Profit tercatat.")
+                st.success("✅ Transaksi Berhasil Disimpan!")
                 st.session_state['input_nominal'] = 0
                 st.session_state['nama_barang_ditemukan'] = ""
                 st.session_state['baris_stok_ditemukan'] = None
@@ -223,7 +270,7 @@ with tab1:
                 st.rerun()
 
 with tab2:
-    st.subheader("📦 Manajemen Stok Barang & Barcode")
+    st.subheader("📦 Manajemen Stok Barang")
     
     with st.expander("➕ Tambah Barang Baru"):
         with st.form("form_tambah_stok", clear_on_submit=True):
@@ -290,31 +337,26 @@ with tab2:
         else:
             st.info("Belum ada data stok.")
 
-# --- TAB 3: RIWAYAT TRANSAKSI DENGAN INDeks AMAN ---
 with tab3:
     st.subheader("📋 Kelola & Filter Riwayat Transaksi")
     if ws_t:
         data_t = ws_t.get_all_values()
         if len(data_t) > 1:
-            # Gunakan baris pertama sebagai header, ambil data secara aman
             df_t = pd.DataFrame(data_t[1:], columns=data_t[0])
             df_t['No_Baris'] = range(2, len(df_t) + 2)
-            
-            # Ambil kolom pertama (indeks 0) sebagai tanggal/waktu tanpa tergantung nama header
             df_t['Tanggal_Saja'] = pd.to_datetime(df_t.iloc[:, 0], errors='coerce').dt.date
             
-            st.write("### 🔍 Filter Tampilan")
+            st.write("### 🔍 Filter Pencarian")
             col_f1, col_f2 = st.columns(2)
             
             with col_f1:
-                # Filter Jenis (menggunakan kolom indeks ke-1 yaitu Jenis)
                 kolom_jenis = df_t.columns[1] if len(df_t.columns) > 1 else 'Jenis'
                 jenis_tersedia = ["Semua"] + df_t[kolom_jenis].unique().tolist()
-                pilih_filter_jenis = st.selectbox("Filter Jenis Transaksi:", options=jenis_tersedia)
+                pilih_filter_jenis = st.selectbox("Jenis Transaksi:", options=jenis_tersedia)
                 
             with col_f2:
                 tanggal_tersedia = sorted(df_t['Tanggal_Saja'].dropna().unique(), reverse=True)
-                pilih_filter_tgl = st.selectbox("Filter Tanggal:", options=["Semua Tanggal"] + [str(t) for t in tanggal_tersedia])
+                pilih_filter_tgl = st.selectbox("Tanggal Transaksi:", options=["Semua Tanggal"] + [str(t) for t in tanggal_tersedia])
             
             df_t_filtered = df_t.copy()
             if pilih_filter_jenis != "Semua":
@@ -329,7 +371,7 @@ with tab3:
             
             st.markdown("---")
             st.write("### 🗑️ Hapus Transaksi Terpilih")
-            baris_hapus_trx = st.multiselect("Pilih Nomor Baris Transaksi yang akan dihapus:", options=df_t_filtered['No_Baris'].tolist(), key="del_trx")
+            baris_hapus_trx = st.multiselect("Pilih Nomor Baris Transaksi:", options=df_t_filtered['No_Baris'].tolist(), key="del_trx")
             if st.button("❌ Hapus Transaksi Terpilih", type="primary"):
                 if baris_hapus_trx:
                     for baris in sorted(baris_hapus_trx, reverse=True):
@@ -341,12 +383,20 @@ with tab3:
         else:
             st.info("Belum ada riwayat transaksi.")
 
-# --- TAB 4: DASHBOARD & PROFIT AMAN ---
 with tab4:
-    st.subheader("📊 Keuangan, Rekap & Grafik Profit")
-    c1, c2 = st.columns(2)
-    c1.metric("Cash di Laci", f"Rp {st.session_state['modal_cash']:,}")
-    c2.metric("Saldo Digital", f"Rp {st.session_state['modal_digi']:,}")
+    st.subheader("📊 Dashboard Keuangan & Profit")
+    
+    # KARTU TAMPILAN KEUANGAN ESTETIK
+    st.markdown(f"""
+        <div class="metric-card-blue">
+            <h4 style="margin:0; color:#1f77b4;">💵 Cash di Laci</h4>
+            <h2 style="margin:5px 0 0 0; color:#333;">Rp {st.session_state['modal_cash']:,}</h2>
+        </div>
+        <div class="metric-card-blue">
+            <h4 style="margin:0; color:#1f77b4;">💳 Saldo Digital</h4>
+            <h2 style="margin:5px 0 0 0; color:#333;">Rp {st.session_state['modal_digi']:,}</h2>
+        </div>
+    """, unsafe_allow_html=True)
     
     st.markdown("---")
     
@@ -364,15 +414,21 @@ with tab4:
                     df_hari_ini['Profit_Val'] = pd.to_numeric(df_hari_ini.iloc[:, 5], errors='coerce').fillna(0)
                     profit_hari_ini = df_hari_ini['Profit_Val'].sum()
 
-    st.metric("🔥 Total Keuntungan (Profit) Hari Ini", f"Rp {profit_hari_ini:,}")
+    # KARTU PROFIT UTAMA
+    st.markdown(f"""
+        <div class="metric-card-green">
+            <h4 style="margin:0; color:#2ca02c;">🔥 Total Keuntungan (Profit) Hari Ini</h4>
+            <h1 style="margin:5px 0 0 0; color:#2ca02c;">Rp {profit_hari_ini:,}</h1>
+        </div>
+    """, unsafe_allow_html=True)
     
-    if st.button("💾 Simpan Rekap Harian ke Sheets", type="primary"):
+    if st.button("💾 Simpan Rekap Harian ke Sheets", type="primary", use_container_width=True):
         if ws_k:
             tanggal = datetime.now(pytz.timezone('Asia/Jakarta')).strftime("%Y-%m-%d")
             ws_k.append_row([tanggal, st.session_state['modal_cash'], st.session_state['modal_digi']])
             st.success("Rekap harian berhasil dikirim ke Sheets!")
 
-    st.markdown("### 📈 Grafik Riwayat Transaksi & Profit")
+    st.markdown("### 📈 Grafik Riwayat Profit Harian")
     if ws_t:
         data_t = ws_t.get_all_values()
         if len(data_t) > 1:
