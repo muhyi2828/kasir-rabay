@@ -19,7 +19,6 @@ def konek_gsheets():
         gc = gspread.service_account_from_dict(kredensial)
         sh = gc.open("Database Kasir")
         
-        # Pengaman otomatis membuat tab jika belum ada
         try: ws_t = sh.worksheet("Transaksi")
         except: ws_t = sh.add_worksheet(title="Transaksi", rows=1000, cols=5)
             
@@ -169,6 +168,7 @@ with tab1:
                 st.success("Semua data berhasil disimpan & kas terupdate!")
                 st.rerun()
 
+# --- TAB 2: RIWAYAT TRANSAKSI (HAPUS MASSAL) ---
 with tab2:
     st.subheader("📋 Kelola Riwayat Transaksi Terakhir")
     if ws_t:
@@ -179,19 +179,28 @@ with tab2:
             st.dataframe(df_t, use_container_width=True)
             
             st.markdown("---")
-            st.write("### 🗑️ Hapus Transaksi Salah")
-            baris_hapus = st.number_input("Masukkan Nomor Baris yang ingin dihapus:", min_value=2, max_value=len(df_t)+1, step=1)
+            st.write("### 🗑️ Hapus Transaksi Sekaligus")
+            st.caption("Pilih satu atau banyak nomor baris yang ingin dihapus. Baris akan dihapus dari Google Sheets.")
             
-            if st.button("❌ Hapus Baris Terpilih dari Database", type="primary"):
-                try:
-                    ws_t.delete_rows(int(baris_hapus))
-                    st.success(f"Berhasil menghapus baris ke-{baris_hapus}!")
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Gagal menghapus: {e}")
+            # Pilihan Banyak (Multiselect)
+            baris_hapus_trx = st.multiselect("Pilih Nomor Baris:", options=df_t['No_Baris'].tolist())
+            
+            if st.button("❌ Hapus Transaksi Terpilih", type="primary"):
+                if baris_hapus_trx:
+                    try:
+                        # Logika Pintar: Hapus dari urutan terbawah agar baris atasnya tidak bergeser
+                        for baris in sorted(baris_hapus_trx, reverse=True):
+                            ws_t.delete_rows(int(baris))
+                        st.success(f"Berhasil menghapus baris: {baris_hapus_trx}!")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Gagal menghapus: {e}")
+                else:
+                    st.warning("Silakan pilih minimal 1 baris untuk dihapus.")
         else:
             st.info("Belum ada riwayat transaksi tersimpan.")
 
+# --- TAB 3: DASHBOARD REKAP (HAPUS REKAP) ---
 with tab3:
     st.subheader("📊 Posisi Keuangan & Grafik Bulanan")
     
@@ -206,16 +215,17 @@ with tab3:
             ws_k.append_row([tanggal, st.session_state['modal_cash'], st.session_state['modal_digi']])
             st.success("Rekap harian berhasil dikirim ke Sheets!")
 
-    st.markdown("### Riwayat & Tren Bulanan")
+    st.markdown("### 📋 Kelola Rekap Bulanan")
     if ws_k:
-        data = ws_k.get_all_values()
-        if len(data) > 1:
-            df = pd.DataFrame(data[1:], columns=data[0])
-            df['Tanggal'] = pd.to_datetime(df['Tanggal'])
-            df['Bulan'] = df['Tanggal'].dt.strftime('%B %Y')
+        data_k = ws_k.get_all_values()
+        if len(data_k) > 1:
+            df_k = pd.DataFrame(data_k[1:], columns=data_k[0])
+            df_k['No_Baris'] = range(2, len(df_k) + 2)  # Menentukan baris asli di Google Sheets
+            df_k['Tanggal'] = pd.to_datetime(df_k['Tanggal'])
+            df_k['Bulan'] = df_k['Tanggal'].dt.strftime('%B %Y')
             
-            bulan_pilih = st.selectbox("Pilih Bulan Rekap:", df['Bulan'].unique())
-            df_filter = df[df['Bulan'] == bulan_pilih]
+            bulan_pilih = st.selectbox("Pilih Bulan Rekap:", df_k['Bulan'].unique())
+            df_filter = df_k[df_k['Bulan'] == bulan_pilih]
             
             st.dataframe(df_filter, use_container_width=True)
             
@@ -223,5 +233,22 @@ with tab3:
                           labels={'value': 'Jumlah (Rp)', 'variable': 'Jenis Kas'},
                           title=f"Grafik Perkembangan Kas - {bulan_pilih}")
             st.plotly_chart(fig, use_container_width=True)
+            
+            st.markdown("---")
+            st.write("### 🗑️ Hapus Rekap Harian Salah")
+            baris_hapus_rekap = st.multiselect("Pilih Nomor Baris Rekap:", options=df_k['No_Baris'].tolist())
+            
+            if st.button("❌ Hapus Rekap Terpilih", type="primary"):
+                if baris_hapus_rekap:
+                    try:
+                        # Logika Pintar yang sama: Hapus dari bawah ke atas
+                        for baris in sorted(baris_hapus_rekap, reverse=True):
+                            ws_k.delete_rows(int(baris))
+                        st.success(f"Berhasil menghapus rekap baris: {baris_hapus_rekap}!")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Gagal menghapus rekap: {e}")
+                else:
+                    st.warning("Silakan pilih minimal 1 baris rekap untuk dihapus.")
         else:
             st.info("Belum ada data rekap di Google Sheets.")
