@@ -35,7 +35,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- FUNGSI FORMAT UANG (TITIK SEBAGAI PEMISAH RIBUAN) ---
+# --- FUNGSI FORMAT UANG ---
 def f_uang(val):
     try:
         val_int = int(val)
@@ -65,9 +65,36 @@ def konek_gsheets():
 
 db, ws_t, ws_k, ws_s = konek_gsheets()
 
-# STATE MANAGEMENT
-if 'modal_cash' not in st.session_state: st.session_state['modal_cash'] = 0
-if 'modal_digi' not in st.session_state: st.session_state['modal_digi'] = 0
+# --- FUNGSI BACA & UPDATE MODAL KE DATABASE ---
+def ambil_modal_terakhir():
+    if ws_k:
+        try:
+            data_k = ws_k.get_all_values()
+            if len(data_k) > 1: # Ambil baris paling bawah
+                baris_terakhir = data_k[-1]
+                return int(baris_terakhir[1]), int(baris_terakhir[2])
+        except: pass
+    return 0, 0
+
+def update_kas_db():
+    if ws_k:
+        try:
+            data_k = ws_k.get_all_values()
+            if len(data_k) > 1:
+                last_row = len(data_k)
+                ws_k.update_cell(last_row, 2, st.session_state['modal_cash'])
+                ws_k.update_cell(last_row, 3, st.session_state['modal_digi'])
+            else:
+                waktu = datetime.now(pytz.timezone('Asia/Jakarta')).strftime("%Y-%m-%d %H:%M:%S")
+                ws_k.append_row([waktu, st.session_state['modal_cash'], st.session_state['modal_digi']])
+        except: pass
+
+# STATE MANAGEMENT DENGAN AUTO-LOAD DATABASE
+if 'modal_cash' not in st.session_state or 'modal_digi' not in st.session_state:
+    c_awal, d_awal = ambil_modal_terakhir()
+    st.session_state['modal_cash'] = c_awal
+    st.session_state['modal_digi'] = d_awal
+
 if 'input_nominal' not in st.session_state: st.session_state['input_nominal'] = 0
 if 'input_jenis' not in st.session_state: st.session_state['input_jenis'] = "Bank"
 if 'draf_scan_smart' not in st.session_state: st.session_state['draf_scan_smart'] = []
@@ -223,7 +250,8 @@ with tab1:
                         st.session_state['modal_cash'] += total_uang
                     
                     if ws_t: ws_t.append_row([waktu, jenis_terpilih, nominal_trx, admin, total_uang, profit_bersih])
-                    st.success("✅ Transaksi Berhasil Disimpan!")
+                    update_kas_db() # UPDATE DATABASE KAS OTOMATIS
+                    st.success("✅ Transaksi Berhasil Disimpan & Kas Terupdate!")
                     st.rerun()
 
             with col_b2:
@@ -281,8 +309,9 @@ with tab1:
                         
                     if ws_t: ws_t.append_row([waktu, j_trx, nom_trx, adm_trx, tot_trx, adm_trx])
                 
+                update_kas_db() # UPDATE DATABASE KAS OTOMATIS
                 st.session_state['keranjang_belanja'] = []
-                st.success("✅ Semua transaksi keranjang berhasil diproses!")
+                st.success("✅ Semua transaksi keranjang diproses & Kas Terupdate!")
                 st.rerun()
                 
             if col_c2.button("🗑️ Kosongkan Keranjang", use_container_width=True):
@@ -348,8 +377,9 @@ with tab1:
                     profit_scan = admin
                     if ws_t: ws_t.append_row([waktu, jenis, nom, admin, total, profit_scan])
                 
+                update_kas_db() # UPDATE DATABASE KAS OTOMATIS
                 st.session_state['draf_scan_smart'] = []
-                st.success("Semua data berhasil disimpan sesuai kategori (+/-) & profit tercatat!")
+                st.success("Semua data berhasil disimpan & Kas Terupdate otomatis!")
                 st.rerun()
 
 # --- TAB 2: RIWAYAT ---
@@ -407,14 +437,24 @@ with tab2:
 with tab3:
     st.subheader("📊 Dashboard Keuangan & Profit")
     
-    with st.expander("💰 Atur Modal Awal Hari Ini", expanded=False):
-        st.session_state['modal_cash'] = st.number_input("Cash di Laci (Rp):", value=st.session_state['modal_cash'], step=50000)
-        if st.session_state['modal_cash'] > 0:
-            st.caption(f"👀 Cash Terbaca: **{f_uang(st.session_state['modal_cash'])}**")
+    with st.expander("💰 Setel Ulang Modal / Buka Kasir", expanded=False):
+        st.warning("Gunakan fitur ini saat baru Buka Toko hari ini atau ingin mereset Modal.")
+        input_cash_baru = st.number_input("Setel Cash di Laci (Rp):", value=st.session_state['modal_cash'], step=50000)
+        if input_cash_baru > 0:
+            st.caption(f"👀 Terbaca: **{f_uang(input_cash_baru)}**")
             
-        st.session_state['modal_digi'] = st.number_input("Saldo Digital (Rp):", value=st.session_state['modal_digi'], step=50000)
-        if st.session_state['modal_digi'] > 0:
-            st.caption(f"👀 Saldo Terbaca: **{f_uang(st.session_state['modal_digi'])}**")
+        input_digi_baru = st.number_input("Setel Saldo Digital (Rp):", value=st.session_state['modal_digi'], step=50000)
+        if input_digi_baru > 0:
+            st.caption(f"👀 Terbaca: **{f_uang(input_digi_baru)}**")
+            
+        if st.button("💾 Simpan Modal Baru ke Database", type="primary", use_container_width=True):
+            st.session_state['modal_cash'] = input_cash_baru
+            st.session_state['modal_digi'] = input_digi_baru
+            waktu = datetime.now(pytz.timezone('Asia/Jakarta')).strftime("%Y-%m-%d %H:%M:%S")
+            if ws_k:
+                ws_k.append_row([waktu, input_cash_baru, input_digi_baru]) # Membuat baris rekap baru
+            st.success("Modal awal berhasil disimpan ke database!")
+            st.rerun()
 
     st.markdown("---")
 
@@ -451,12 +491,6 @@ with tab3:
             <h1 style="margin:5px 0 0 0; color:#2ca02c;">{f_uang(profit_hari_ini)}</h1>
         </div>
     """, unsafe_allow_html=True)
-    
-    if st.button("💾 Simpan Rekap Harian ke Sheets", type="primary", use_container_width=True):
-        if ws_k:
-            tanggal = datetime.now(pytz.timezone('Asia/Jakarta')).strftime("%Y-%m-%d")
-            ws_k.append_row([tanggal, st.session_state['modal_cash'], st.session_state['modal_digi']])
-            st.success("Rekap harian berhasil dikirim ke Sheets!")
 
     st.markdown("### 📈 Grafik Riwayat Profit Harian")
     if ws_t:
