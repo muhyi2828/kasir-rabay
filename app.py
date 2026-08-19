@@ -246,7 +246,7 @@ with tab1:
                 total_uang = nominal_trx
                 profit_bersih = profit_brg_det if profit_brg_det > 0 else 0
             elif jenis_terpilih == "Transaksi Lainnya":
-                admin = profit_manual  # Admin otomatis terisi dari Cuan Manual yang diinput
+                admin = profit_manual
                 total_uang = nominal_trx + admin
                 profit_bersih = admin
             else:
@@ -389,8 +389,9 @@ with tab1:
                 st.success("Tersimpan!")
                 st.rerun()
 
-# --- TAB 2: RIWAYAT ---
+# --- TAB 2: RIWAYAT (DENGAN TOMBOL HAPUS DI MASING-MASING BARIS) ---
 with tab2:
+    st.subheader("📋 Daftar Riwayat Transaksi")
     if ws_t:
         data_t = ws_t.get_all_values()
         if len(data_t) > 1:
@@ -401,27 +402,31 @@ with tab2:
             col_f1, col_f2 = st.columns(2)
             with col_f1:
                 kolom_jenis = df_t.columns[1] if len(df_t.columns) > 1 else 'Jenis'
-                pilih_filter_jenis = st.selectbox("Jenis:", options=["Semua"] + df_t[kolom_jenis].unique().tolist())
+                pilih_filter_jenis = st.selectbox("Jenis:", options=["Semua"] + df_t[kolom_jenis].unique().tolist(), key="filter_j_trx")
             with col_f2:
-                pilih_filter_tgl = st.selectbox("Tanggal:", options=["Semua Tanggal"] + [str(t) for t in sorted(df_t['Tanggal_Saja'].dropna().unique(), reverse=True)])
+                pilih_filter_tgl = st.selectbox("Tanggal:", options=["Semua Tanggal"] + [str(t) for t in sorted(df_t['Tanggal_Saja'].dropna().unique(), reverse=True)], key="filter_t_trx")
             
             df_t_filtered = df_t.copy()
             if pilih_filter_jenis != "Semua": df_t_filtered = df_t_filtered[df_t_filtered[kolom_jenis] == pilih_filter_jenis]
             if pilih_filter_tgl != "Semua Tanggal": df_t_filtered = df_t_filtered[df_t_filtered['Tanggal_Saja'].astype(str) == pilih_filter_tgl]
             
-            df_t_display = df_t_filtered.drop(columns=['Tanggal_Saja'])
-            for c_nm in ['Nominal', 'Admin', 'Total', 'Profit']:
-                if c_nm in df_t_display.columns: df_t_display[c_nm] = df_t_display[c_nm].apply(lambda x: f_uang(x) if str(x).isdigit() else x)
-            
-            st.dataframe(df_t_display, use_container_width=True)
-            
-            baris_hapus_trx = st.multiselect("Hapus Transaksi (No Baris):", options=df_t_filtered['No_Baris'].tolist(), key="hapus_trx_multi")
-            # --- PENAMBAHAN KEY PADA TOMBOL UNTUK MENGHINDARI ERROR DUPLIKASI ---
-            if st.button("❌ Hapus Terpilih", type="primary", key="btn_hapus_trx"):
-                if baris_hapus_trx:
-                    for baris in sorted(baris_hapus_trx, reverse=True): ws_t.delete_rows(int(baris))
-                    st.success("Terhapus!")
-                    st.rerun()
+            st.markdown("---")
+            for index, row in df_t_filtered.iterrows():
+                b_num = int(row['No_Baris'])
+                waktu_trx = row.iloc[0]
+                jns_trx = row.iloc[1]
+                nom_trx = f_uang(row.iloc[2]) if str(row.iloc[2]).isdigit() else row.iloc[2]
+                tot_trx = f_uang(row.iloc[4]) if str(row.iloc[4]).isdigit() else row.iloc[4]
+                
+                col_i1, col_i2 = st.columns([4, 1])
+                with col_i1:
+                    st.markdown(f"**{waktu_trx}** | <span style='color:#14B8A6;'>{jns_trx}</span><br>Nominal: {nom_trx} | Total: {tot_trx}", unsafe_allow_html=True)
+                with col_i2:
+                    if st.button("❌ Hapus", key=f"del_row_trx_{b_num}", use_container_width=True):
+                        ws_t.delete_rows(b_num)
+                        st.success(f"Baris {b_num} dihapus!")
+                        st.rerun()
+                st.markdown("<hr style='margin:5px 0; border-color:#333;'>", unsafe_allow_html=True)
         else: st.info("Belum ada riwayat transaksi.")
 
 # --- TAB 3: DASHBOARD ---
@@ -483,7 +488,7 @@ with tab3:
             fig_profit = px.bar(df_profit_harian, x='Tanggal', y='Profit_Val', template="plotly_dark", color_discrete_sequence=['#14B8A6'])
             st.plotly_chart(fig_profit, use_container_width=True)
 
-# --- TAB 4: STOK BARANG ---
+# --- TAB 4: STOK BARANG (DENGAN TOMBOL HAPUS DI MASING-MASING BARIS) ---
 with tab4:
     with st.expander("➕ Tambah Barang Baru"):
         barcode_input = st.text_input("Nomor Barcode / Label:")
@@ -505,16 +510,34 @@ with tab4:
                 st.rerun()
 
     st.markdown("---")
+    st.subheader("📋 Daftar Stok Tersedia")
     if ws_s:
         data_s = ws_s.get_all_values()
         if len(data_s) > 1:
             df_s = pd.DataFrame(data_s[1:], columns=data_s[0])
             df_s['No_Baris'] = range(2, len(df_s) + 2)
-            if 'Harga_Modal' in df_s.columns: df_s['Harga_Modal'] = df_s['Harga_Modal'].apply(lambda x: f_uang(x) if str(x).isdigit() else x)
-            if 'Harga_Jual' in df_s.columns: df_s['Harga_Jual'] = df_s['Harga_Jual'].apply(lambda x: f_uang(x) if str(x).isdigit() else x)
-            st.dataframe(df_s, use_container_width=True)
             
-            pilih_nama_edit = st.selectbox("Edit Data Stok:", options=["-- Pilih Barang --"] + df_s['Nama_Barang'].tolist())
+            # Tampilkan daftar stok baris per baris dengan tombol hapus & edit instan
+            for index, row in df_s.iterrows():
+                b_stok = int(row['No_Baris'])
+                bc = row.iloc[0]
+                nm = row.iloc[1]
+                stk = row.iloc[2]
+                h_jual = f_uang(row.iloc[4]) if str(row.iloc[4]).isdigit() else row.iloc[4]
+                
+                col_s1, col_s2 = st.columns([4, 1])
+                with col_s1:
+                    st.markdown(f"**{nm}** (Stok: <span style='color:#14B8A6;'>{stk}</span>)<br>Harga Jual: {h_jual} | Barcode: {bc}", unsafe_allow_html=True)
+                with col_s2:
+                    if st.button("❌ Hapus", key=f"del_row_stok_{b_stok}", use_container_width=True):
+                        ws_s.delete_rows(b_stok)
+                        st.success("Stok dihapus!")
+                        st.rerun()
+                st.markdown("<hr style='margin:5px 0; border-color:#333;'>", unsafe_allow_html=True)
+
+            st.markdown("---")
+            st.subheader("✏️ Edit Data Stok Barang")
+            pilih_nama_edit = st.selectbox("Pilih Barang yang mau di-edit:", options=["-- Pilih Barang --"] + df_s['Nama_Barang'].tolist())
             if pilih_nama_edit != "-- Pilih Barang --":
                 match_row = df_s[df_s['Nama_Barang'] == pilih_nama_edit]
                 if not match_row.empty:
@@ -533,10 +556,5 @@ with tab4:
                         ws_s.update(f"A{pilih_baris_edit}:F{pilih_baris_edit}", [[edit_barcode, edit_nama, edit_stok, edit_modal, edit_jual, edit_kode]])
                         st.success("Updated!")
                         st.rerun()
-
-            baris_hapus_stok = st.multiselect("Hapus Stok (No Baris):", options=df_s['No_Baris'].tolist(), key="hapus_stok_multi")
-            # --- PENAMBAHAN KEY PADA TOMBOL UNTUK MENGHINDARI ERROR DUPLIKASI ---
-            if st.button("❌ Hapus Terpilih", type="primary", key="btn_hapus_stok"):
-                if baris_hapus_stok:
-                    for b in sorted(baris_hapus_stok, reverse=True): ws_s.delete_rows(int(b))
-                    st.rerun()
+        else:
+            st.info("Belum ada data stok.")
