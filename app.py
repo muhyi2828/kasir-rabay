@@ -11,26 +11,24 @@ import pytz
 
 st.set_page_config(page_title="RABAY CELL PRO", layout="centered", page_icon="🚀")
 
-# --- CSS KHUSUS UNTUK MEMAKSA SEJAJAR DI HP (FLEXBOX) ---
+# --- CUSTOM CSS UNTUK TAMPILAN ELEGAN & SEJAJAR ---
 st.markdown("""
     <style>
     .main { background-color: #0e1117; color: #ffffff; }
-    
-    /* Membungkus Header agar benar-benar sejajar kiri dan kanan */
-    .top-header {
+    .header-box {
         display: flex;
         justify-content: space-between;
         align-items: center;
         width: 100%;
-        margin-bottom: 5px;
+        margin-bottom: 10px;
     }
-    
-    /* Membungkus Input Kode & Kamera agar sejajar */
-    .input-row {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        width: 100%;
+    .metric-card-blue {
+        background-color: #161b22; padding: 15px; border-radius: 10px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.3); margin-bottom: 10px; border-left: 4px solid #00b4d8;
+    }
+    .metric-card-green {
+        background-color: #161b22; padding: 15px; border-radius: 10px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.3); margin-bottom: 10px; border-left: 4px solid #2ea043;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -106,14 +104,17 @@ def hitung_admin(nominal, jenis):
             kelipatan = -(-sisa // 5000000)
             return 35000 + (kelipatan * 5000)
 
-# --- HEADER: RABAY CELL (KIRI) & STOK BARANG (KANAN ATAS) ---
-c_head1, c_head2 = st.columns([1.2, 1])
-with c_head1:
-    st.markdown("<h2 style='color:#00b4d8; margin:0; line-height:1.5;'>RABAY CELL</h2>", unsafe_allow_html=True)
-with c_head2:
-    if st.button("📦 STOK BARANG", use_container_width=True, type="secondary"):
-        st.session_state['menu_aktif'] = "Stok Barang"
-        st.rerun()
+# --- HEADER: RABAY CELL & TOMBOL STOK BARANG ---
+st.markdown("""
+    <div class="header-box">
+        <h3 style="color:#00b4d8; margin:0; font-weight:900;">RABAY CELL</h3>
+""", unsafe_allow_html=True)
+
+if st.button("📦 STOK BARANG", type="secondary", key="btn_stok_top"):
+    st.session_state['menu_aktif'] = "Stok Barang"
+    st.rerun()
+
+st.markdown("</div>", unsafe_allow_html=True)
 
 # --- MODAL CASH & SALDO DIGITAL DI BAWAHNYA ---
 col_m1, col_m2 = st.columns(2)
@@ -146,9 +147,7 @@ st.markdown("---")
 # ==================== KONTROL MENU: TRANSAKSI ====================
 if st.session_state['menu_aktif'] == "Transaksi":
     
-    # --- INPUT KODE CEPAT & TOMBOL KAMERA OCR DI SEBELAH KANANNYA (CUSTOM HTML WRAPPER) ---
     col_inp1, col_inp2 = st.columns([5, 1])
-    
     with col_inp1:
         quick = st.text_input("Input Kode Cepat/Barcode", placeholder="TF100, EW50, Kode Barang...", label_visibility="collapsed")
     with col_inp2:
@@ -184,7 +183,6 @@ if st.session_state['menu_aktif'] == "Transaksi":
             try: st.session_state['input_nominal'] = int(float(angka_str) * 1000)
             except: pass
 
-    # --- FITUR OCR KAMERA DALAM POPOVER ---
     with btn_kamera:
         st.write("### Scan Foto Mutasi AI")
         sumber_gambar = st.file_uploader("Upload Screenshot:", type=["jpg", "jpeg", "png"])
@@ -218,7 +216,6 @@ if st.session_state['menu_aktif'] == "Transaksi":
                 st.success("Semua data scan tersimpan!")
                 st.rerun()
 
-    # --- PILIHAN JENIS TRANSAKSI ---
     st.markdown("<p style='font-weight:bold; margin-bottom:5px;'>Jenis Transaksi:</p>", unsafe_allow_html=True)
     pilihan_jenis = ["Bank", "E-Wallet", "Tarik Tunai", "Penjualan Barang", "Transaksi Lainnya"]
     current_idx = pilihan_jenis.index(st.session_state['input_jenis']) if st.session_state['input_jenis'] in pilihan_jenis else 0
@@ -362,6 +359,20 @@ elif st.session_state['menu_aktif'] == "Riwayat":
 elif st.session_state['menu_aktif'] == "Dashboard":
     st.subheader("📊 Dashboard Keuangan & Profit")
     
+    # KARTU INFORMASI SALDO KAS & DIGITAL
+    st.markdown(f"""
+        <div class="metric-card-blue">
+            <h4 style="margin:0; color:#00b4d8;">💵 Cash di Laci</h4>
+            <h2 style="margin:5px 0 0 0; color:#fff;">Rp {st.session_state['modal_cash']:,}</h2>
+        </div>
+        <div class="metric-card-blue">
+            <h4 style="margin:0; color:#00b4d8;">💳 Saldo Digital</h4>
+            <h2 style="margin:5px 0 0 0; color:#fff;">Rp {st.session_state['modal_digi']:,}</h2>
+        </div>
+    """, unsafe_allow_html=True)
+    
+    st.markdown("---")
+    
     profit_hari_ini = 0
     if ws_t:
         data_t = ws_t.get_all_values()
@@ -375,7 +386,7 @@ elif st.session_state['menu_aktif'] == "Dashboard":
                     profit_hari_ini = pd.to_numeric(df_hi.iloc[:, 5], errors='coerce').fillna(0).sum()
 
     st.markdown(f"""
-        <div style="background-color: #161b22; padding: 15px; border-radius: 10px; border-left: 4px solid #2ea043; margin-bottom: 15px;">
+        <div class="metric-card-green">
             <h4 style="margin:0; color:#2ea043;">🔥 Total Keuntungan Hari Ini</h4>
             <h1 style="margin:5px 0 0 0; color:#2ea043;">Rp {profit_hari_ini:,}</h1>
         </div>
