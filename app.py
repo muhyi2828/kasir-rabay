@@ -9,96 +9,122 @@ import pytz
 
 st.set_page_config(page_title="Kasir RABAY CELL PRO", layout="centered")
 
-# Inisialisasi Database
+# 1. KONEKSI DATABASE
 @st.cache_resource
 def konek_gsheets():
     try:
         json_string = st.secrets["GOOGLE_JSON"].strip()
         kredensial = json.loads(json_string)
         gc = gspread.service_account_from_dict(kredensial)
-        sh = gc.open("Database Kasir")
-        return sh, "Aman"
-    except Exception as e: return None, str(e)
+        return gc.open("Database Kasir")
+    except: return None
 
-db, error = konek_gsheets()
-ws_transaksi = db.worksheet("Transaksi") if db else None
-ws_kas = db.worksheet("Kas_Harian") if db else None
+db = konek_gsheets()
+ws_t = db.worksheet("Transaksi") if db else None
+ws_k = db.worksheet("Kas_Harian") if db else None
 
-# Inisialisasi State
+# 2. STATE MANAGEMENT
 if 'modal_cash' not in st.session_state: st.session_state['modal_cash'] = 0
 if 'modal_digi' not in st.session_state: st.session_state['modal_digi'] = 0
-if 'hasil_scan' not in st.session_state: st.session_state['hasil_scan'] = []
+if 'input_nominal' not in st.session_state: st.session_state['input_nominal'] = 0
+if 'input_jenis' not in st.session_state: st.session_state['input_jenis'] = "Bank"
 
 st.title("🚀 Kasir RABAY CELL PRO")
 
-# MODUL MODAL AWAL
-with st.expander("💰 Setel Modal Awal"):
-    st.session_state['modal_cash'] = st.number_input("Modal Cash di Laci:", value=st.session_state['modal_cash'])
-    st.session_state['modal_digi'] = st.number_input("Saldo Digital Awal:", value=st.session_state['modal_digi'])
+# 3. MODUL KAS AWAL
+with st.expander("💰 Modal Awal Hari Ini"):
+    st.session_state['modal_cash'] = st.number_input("Cash di Laci (Rp):", value=st.session_state['modal_cash'], step=50000)
+    st.session_state['modal_digi'] = st.number_input("Saldo Digital (Rp):", value=st.session_state['modal_digi'], step=50000)
 
-# FUNGSI HITUNG & PROSES
+# 4. FUNGSI HITUNG ADMIN LENGKAP
 def hitung_admin(nominal, jenis):
     if jenis == "E-Wallet" and nominal <= 1500000:
         if nominal <= 98000: return 2000
+        elif nominal <= 199000: return 3000
         elif nominal <= 299000: return 4000
+        elif nominal <= 699000: return 5000
+        elif nominal <= 1000000: return 8000
         else: return 10000
-    else: # Tarik Tunai / Bank
-        if nominal <= 400000: return 5000
-        elif nominal <= 1000000: return 10000
-        else: return 20000
+    else: # Tarif Bank / Tarik Tunai
+        if nominal <= 98000: return 3000
+        elif nominal <= 400000: return 5000
+        elif nominal <= 700000: return 8000
+        elif nominal <= 1200000: return 10000
+        elif nominal <= 1700000: return 13000
+        elif nominal <= 2500000: return 15000
+        elif nominal <= 3500000: return 20000
+        elif nominal <= 5000000: return 25000
+        elif nominal <= 7000000: return 30000
+        elif nominal <= 10000000: return 35000
+        else:
+            sisa = nominal - 10000000
+            kelipatan = -(-sisa // 5000000)
+            return 35000 + (kelipatan * 5000)
 
-# INPUT & SCANNER
-quick = st.text_input("Kode Cepat (Contoh: TF100, EW50, TK200):")
-if quick:
-    code = quick.upper().strip()
-    nominal = int(re.sub(r'[^0-9.]', '', code)) * 1000
-    jenis = "E-Wallet" if code.startswith("EW") else "Tarik Tunai" if code.startswith("TK") else "Bank"
-    st.session_state['hasil_scan'] = [{"Nominal": nominal, "Jenis": jenis}]
+tab1, tab2 = st.tabs(["⚡ Input Transaksi", "📊 Dashboard Kas"])
 
-sumber_gambar = st.file_uploader("Atau Upload Screenshot Mutasi:", type=["jpg", "png"])
-if sumber_gambar and st.button("🔍 Scan AI"):
-    client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
-    img = Image.open(sumber_gambar)
-    res = client.models.generate_content(model='gemini-3.6-flash', contents=[img, "Tulis semua nominal transaksi, balas dengan format: 5000000,9000000"])
-    nums = [int(x) for x in re.sub(r'[^0-9,]', '', res.text).split(',') if x.isdigit()]
-    st.session_state['hasil_scan'] = [{"Nominal": n, "Jenis": "Bank"} for n in nums]
+with tab1:
+    # A. Input Cepat
+    quick = st.text_input("Kode Cepat (Contoh: TF100, EW50, TK200):")
+    if quick:
+        code = quick.upper().strip()
+        st.session_state['input_jenis'] = "E-Wallet" if code.startswith("EW") else "Tarik Tunai" if code.startswith("TK") else "Bank"
+        angka_str = re.sub(r'[^0-9.]', '', code)
+        try: st.session_state['input_nominal'] = int(float(angka_str) * 1000)
+        except: pass
 
-# PROSES TRANSAKSI
-if st.session_state['hasil_scan']:
-    st.subheader("Draf Transaksi")
-    for i, item in enumerate(st.session_state['hasil_scan']):
-        col1, col2 = st.columns([2,1])
-        item['Jenis'] = col1.selectbox(f"Jenis #{i+1}", ["Bank", "E-Wallet", "Tarik Tunai"], index=["Bank", "E-Wallet", "Tarik Tunai"].index(item['Jenis']))
-        st.write(f"Nominal: Rp {item['Nominal']:,}")
+    # B. Pilihan & Kalkulasi Rinci
+    st.markdown("---")
+    st.session_state['input_jenis'] = st.radio("Jenis Transaksi:", ["Bank", "E-Wallet", "Tarik Tunai"], 
+                                                index=["Bank", "E-Wallet", "Tarik Tunai"].index(st.session_state['input_jenis']), horizontal=True)
     
-    if st.button("💾 Simpan & Update Kas"):
-        tz = pytz.timezone('Asia/Jakarta')
-        waktu = datetime.now(tz).strftime("%Y-%m-%d %H:%M:%S")
+    nominal_trx = st.number_input("Nominal Transaksi (Rp):", value=st.session_state['input_nominal'], step=10000)
+    
+    if nominal_trx > 0:
+        admin = hitung_admin(nominal_trx, st.session_state['input_jenis'])
+        total_uang = nominal_trx + admin if st.session_state['input_jenis'] != "Tarik Tunai" else nominal_trx - admin
         
-        for item in st.session_state['hasil_scan']:
-            admin = hitung_admin(item['Nominal'], item['Jenis'])
+        c1, c2 = st.columns(2)
+        c1.metric("Nominal", f"Rp {nominal_trx:,}")
+        c2.metric("Admin", f"Rp {admin:,}")
+        
+        if st.session_state['input_jenis'] == "Tarik Tunai":
+            st.info(f"💵 Uang Tunai Diberikan ke Pelanggan: **Rp {total_uang:,}**")
+        else:
+            st.success(f"💰 Total Tagihan Pelanggan: **Rp {total_uang:,}**")
             
-            # Update Logika Kas
-            if item['Jenis'] == "Tarik Tunai":
-                st.session_state['modal_cash'] -= item['Nominal']
-                st.session_state['modal_digi'] += (item['Nominal'] - admin)
-            elif item['Jenis'] == "E-Wallet":
-                st.session_state['modal_cash'] += (item['Nominal'] + admin)
-                st.session_state['modal_digi'] -= item['Nominal']
-            else:
-                st.session_state['modal_cash'] += admin
+        if st.button("💾 Simpan & Update Kas", type="primary", use_container_width=True):
+            waktu = datetime.now(pytz.timezone('Asia/Jakarta')).strftime("%Y-%m-%d %H:%M:%S")
             
-            if ws_transaksi: ws_transaksi.append_row([waktu, item['Jenis'], item['Nominal'], admin])
+            # --- LOGIKA KAS OTOMATIS ---
+            if st.session_state['input_jenis'] == "Tarik Tunai":
+                # Tarik tunai: Cash di laci berkurang (diberikan ke orang), Saldo digital bertambah dari admin/potongan
+                st.session_state['modal_cash'] -= total_uang
+                st.session_state['modal_digi'] += nominal_trx
+            elif st.session_state['input_jenis'] == "E-Wallet":
+                # E-Wallet: Saldo digital berkurang (untuk topup), Cash di laci bertambah (terima uang fisik + admin dari customer)
+                st.session_state['modal_digi'] -= nominal_trx
+                st.session_state['modal_cash'] += total_uang
+            else: # Bank (Transfer)
+                # Bank: Saldo digital berkurang (transfer keluar), Cash di laci bertambah (uang fisik dari customer + admin)
+                st.session_state['modal_digi'] -= nominal_trx
+                st.session_state['modal_cash'] += total_uang
             
-        st.session_state['hasil_scan'] = []
-        st.rerun()
+            # Simpan ke Google Sheets Transaksi
+            if ws_t:
+                ws_t.append_row([waktu, st.session_state['input_jenis'], nominal_trx, admin, total_uang])
+                
+            st.success("✅ Transaksi tersimpan & Kas berhasil diperbarui!")
+            st.session_state['input_nominal'] = 0
+            st.rerun()
 
-# DASHBOARD
-st.markdown("---")
-c1, c2 = st.columns(2)
-c1.metric("Cash Laci", f"Rp {st.session_state['modal_cash']:,}")
-c2.metric("Saldo Digi", f"Rp {st.session_state['modal_digi']:,}")
-
-if st.button("📊 Rekap Harian ke Sheets"):
-    if ws_kas: ws_kas.append_row([datetime.now().strftime("%Y-%m-%d"), st.session_state['modal_cash'], st.session_state['modal_digi']])
-    st.success("Rekap tersimpan!")
+with tab2:
+    st.subheader("Posisi Keuangan Sekarang")
+    c1, c2 = st.columns(2)
+    c1.metric("Cash di Laci", f"Rp {st.session_state['modal_cash']:,}")
+    c2.metric("Saldo Digital", f"Rp {st.session_state['modal_digi']:,}")
+    
+    if st.button("📊 Rekap Harian ke Google Sheets"):
+        if ws_k:
+            ws_k.append_row([datetime.now().strftime("%Y-%m-%d"), st.session_state['modal_cash'], st.session_state['modal_digi']])
+            st.success("Rekap harian berhasil dikirim ke Sheets!")
