@@ -11,36 +11,12 @@ import pytz
 
 st.set_page_config(page_title="RABAY CELL PRO", layout="centered", page_icon="🚀")
 
-# --- CUSTOM CSS TAMPILAN GAYA KASIR PROFESIONAL ---
+# --- CUSTOM CSS KHUSUS HP & TAMPILAN RAPI ---
 st.markdown("""
     <style>
     .main { background-color: #0e1117; color: #ffffff; }
-    /* Header Utama */
-    .header-container {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        background: linear-gradient(135deg, #00b4d8, #0077b6);
-        padding: 15px 20px;
-        border-radius: 12px;
-        margin-bottom: 15px;
-    }
-    .header-title {
-        color: white;
-        font-size: 24px;
-        font-weight: 900;
-        margin: 0;
-        letter-spacing: 1px;
-    }
-    /* Kartu Metrik & Kas */
-    .metric-card-blue {
-        background-color: #161b22; padding: 15px; border-radius: 10px;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.3); margin-bottom: 10px; border-left: 4px solid #00b4d8;
-    }
-    .metric-card-green {
-        background-color: #161b22; padding: 15px; border-radius: 10px;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.3); margin-bottom: 10px; border-left: 4px solid #2ea043;
-    }
+    /* Memaksa elemen agar tidak turun bertumpuk di HP */
+    .row-widget.stHorizontal { display: flex; flex-direction: row; align-items: center; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -115,25 +91,26 @@ def hitung_admin(nominal, jenis):
             kelipatan = -(-sisa // 5000000)
             return 35000 + (kelipatan * 5000)
 
-# --- HEADER UTAMA (RABAY CELL & TOMBOL STOK BARANG DI KANAN ATAS) ---
-col_h1, col_h2 = st.columns([2, 1])
+# --- 1. HEADER ATAS: RABAY CELL & TOMBOL STOK BARANG SEJAJAR ---
+col_h1, col_h2 = st.columns([1.3, 0.9])
 with col_h1:
-    st.markdown("<h2 style='color:#00b4d8; margin:0;'>RABAY CELL</h2>", unsafe_allow_html=True)
+    st.markdown("<h3 style='color:#00b4d8; margin:0; padding-top:5px;'>RABAY CELL</h3>", unsafe_allow_html=True)
 with col_h2:
     if st.button("📦 STOK BARANG", use_container_width=True, type="secondary"):
         st.session_state['menu_aktif'] = "Stok Barang"
 
-# --- EDIT UANG DI LACI & SALDO DIGITAL DI BAWAHNYA ---
-st.markdown("<p style='font-size:12px; color:#aaa; margin-bottom:2px;'>Atur Uang Kas & Saldo Digital:</p>", unsafe_allow_html=True)
+# --- 2. MODAL CASH & SALDO DIGITAL SEJAJAR DI BAWAHNYA ---
 col_m1, col_m2 = st.columns(2)
 with col_m1:
-    st.session_state['modal_cash'] = st.number_input("Modal Cash (Rp):", value=st.session_state['modal_cash'], step=50000, label_visibility="collapsed")
+    st.markdown("<p style='font-size:11px; color:#aaa; margin:0;'>Modal Cash:</p>", unsafe_allow_html=True)
+    st.session_state['modal_cash'] = st.number_input("Modal Cash", value=st.session_state['modal_cash'], step=50000, label_visibility="collapsed")
 with col_m2:
-    st.session_state['modal_digi'] = st.number_input("Modal Saldo (Rp):", value=st.session_state['modal_digi'], step=50000, label_visibility="collapsed")
+    st.markdown("<p style='font-size:11px; color:#aaa; margin:0;'>Modal Saldo:</p>", unsafe_allow_html=True)
+    st.session_state['modal_digi'] = st.number_input("Modal Saldo", value=st.session_state['modal_digi'], step=50000, label_visibility="collapsed")
 
-st.markdown("---")
+st.markdown("<div style='margin: 5px 0;'></div>", unsafe_allow_html=True)
 
-# --- TOMBOL NAVIGASI UTAMA (TRANSAKSI, RIWAYAT, DASHBOARD) ---
+# --- 3. MENU UTAMA: TRANSAKSI, RIWAYAT, DASHBOARD SEJAJAR ---
 nav1, nav2, nav3 = st.columns(3)
 with nav1:
     if st.button("⚡ TRANSAKSI", use_container_width=True, type="primary" if st.session_state['menu_aktif']=="Transaksi" else "secondary"):
@@ -150,15 +127,14 @@ st.markdown("---")
 # ==================== KONTROL MENU: TRANSAKSI ====================
 if st.session_state['menu_aktif'] == "Transaksi":
     
-    # --- INPUT KODE CEPAT + TOMBOL KAMERA OCR DI KANAN ---
+    # --- 4. INPUT KODE CEPAT & TOMBOL KAMERA OCR DI SEBELAH KANANNYA ---
     col_inp1, col_inp2 = st.columns([5, 1])
     
     with col_inp1:
-        quick = st.text_input("Input Kode Cepat/Barcode:", placeholder="Ketik TF100, EW50, Kode Barang...", label_visibility="collapsed")
+        quick = st.text_input("Input Kode Cepat/Barcode", placeholder="TF100, EW50, Kode Barang...", label_visibility="collapsed")
     with col_inp2:
         btn_kamera = st.popover("📷", help="Scan Foto Mutasi AI")
 
-    # Logika Kode Cepat
     if quick:
         code = quick.upper().strip()
         st.session_state['nama_barang_ditemukan'] = ""
@@ -189,7 +165,7 @@ if st.session_state['menu_aktif'] == "Transaksi":
             try: st.session_state['input_nominal'] = int(float(angka_str) * 1000)
             except: pass
 
-    # --- FITUR OCR DALAM POPOVER KAMERA ---
+    # --- FITUR OCR KAMERA DALAM POPOVER ---
     with btn_kamera:
         st.write("### Scan Foto Mutasi AI")
         sumber_gambar = st.file_uploader("Upload Screenshot:", type=["jpg", "jpeg", "png"])
@@ -380,7 +356,7 @@ elif st.session_state['menu_aktif'] == "Dashboard":
                     profit_hari_ini = pd.to_numeric(df_hi.iloc[:, 5], errors='coerce').fillna(0).sum()
 
     st.markdown(f"""
-        <div class="metric-card-green">
+        <div style="background-color: #161b22; padding: 15px; border-radius: 10px; border-left: 4px solid #2ea043; margin-bottom: 15px;">
             <h4 style="margin:0; color:#2ea043;">🔥 Total Keuntungan Hari Ini</h4>
             <h1 style="margin:5px 0 0 0; color:#2ea043;">Rp {profit_hari_ini:,}</h1>
         </div>
