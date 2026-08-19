@@ -66,17 +66,8 @@ if 'draf_scan' not in st.session_state: st.session_state['draf_scan'] = []
 if 'nama_barang_ditemukan' not in st.session_state: st.session_state['nama_barang_ditemukan'] = ""
 if 'baris_stok_ditemukan' not in st.session_state: st.session_state['baris_stok_ditemukan'] = None
 if 'profit_barang_ini' not in st.session_state: st.session_state['profit_barang_ini'] = 0
-if 'active_tab_idx' not in st.session_state: st.session_state['active_tab_idx'] = 0
 
-# --- HEADER ATAS: RABAY CELL (KIRI) & TOMBOL STOK (UJUNG KANAN) ---
-col_h1, col_h2 = st.columns([3.5, 1])
-with col_h1:
-    st.markdown("<h3 style='color:#00b4d8; margin:0; padding-top:5px;'>RABAY CELL</h3>", unsafe_allow_html=True)
-with col_h2:
-    if st.button("📦 STOK BARANG", use_container_width=True):
-        st.session_state['active_tab_idx'] = 1
-        st.rerun()
-
+st.markdown("<h3 style='color:#00b4d8; margin:0;'>RABAY CELL</h3>", unsafe_allow_html=True)
 st.caption("Sistem Kasir & Manajemen Stok Konter Profesional")
 
 def hitung_admin(nominal, jenis):
@@ -117,7 +108,8 @@ def hitung_admin(nominal, jenis):
             kelipatan = -(-sisa // 5000000)
             return 35000 + (kelipatan * 5000)
 
-tab1, tab2, tab3, tab4 = st.tabs(["⚡ Transaksi", "📦 Stok Barang", "📋 Riwayat", "📊 Dashboard & Untung"])
+# --- URUTAN TAB: Transaksi, Riwayat, Dashboard, Stok Barang ---
+tab1, tab2, tab3, tab4 = st.tabs(["⚡ Transaksi", "📋 Riwayat", "📊 Dashboard & Untung", "📦 Stok Barang"])
 
 with tab1:
     st.subheader("⚡ Input Transaksi Baru")
@@ -263,7 +255,123 @@ with tab1:
                 st.success("Semua data berhasil disimpan & profit tercatat!")
                 st.rerun()
 
+# --- TAB 2: RIWAYAT ---
 with tab2:
+    st.subheader("📋 Kelola & Filter Riwayat Transaksi")
+    if ws_t:
+        data_t = ws_t.get_all_values()
+        if len(data_t) > 1:
+            df_t = pd.DataFrame(data_t[1:], columns=data_t[0])
+            df_t['No_Baris'] = range(2, len(df_t) + 2)
+            df_t['Tanggal_Saja'] = pd.to_datetime(df_t.iloc[:, 0], errors='coerce').dt.date
+            
+            st.write("### 🔍 Filter Pencarian")
+            col_f1, col_f2 = st.columns(2)
+            
+            with col_f1:
+                kolom_jenis = df_t.columns[1] if len(df_t.columns) > 1 else 'Jenis'
+                jenis_tersedia = ["Semua"] + df_t[kolom_jenis].unique().tolist()
+                pilih_filter_jenis = st.selectbox("Jenis Transaksi:", options=jenis_tersedia)
+                
+            with col_f2:
+                tanggal_tersedia = sorted(df_t['Tanggal_Saja'].dropna().unique(), reverse=True)
+                pilih_filter_tgl = st.selectbox("Tanggal Transaksi:", options=["Semua Tanggal"] + [str(t) for t in tanggal_tersedia])
+            
+            df_t_filtered = df_t.copy()
+            if pilih_filter_jenis != "Semua":
+                df_t_filtered = df_t_filtered[df_t_filtered[kolom_jenis] == pilih_filter_jenis]
+            if pilih_filter_tgl != "Semua Tanggal":
+                df_t_filtered = df_t_filtered[df_t_filtered['Tanggal_Saja'].astype(str) == pilih_filter_tgl]
+                
+            df_t_display = df_t_filtered.drop(columns=['Tanggal_Saja'])
+            
+            st.markdown("---")
+            st.dataframe(df_t_display, use_container_width=True)
+            
+            st.markdown("---")
+            st.write("### 🗑️ Hapus Transaksi Terpilih")
+            baris_hapus_trx = st.multiselect("Pilih Nomor Baris Transaksi:", options=df_t_filtered['No_Baris'].tolist(), key="del_trx")
+            if st.button("❌ Hapus Transaksi Terpilih", type="primary"):
+                if baris_hapus_trx:
+                    for baris in sorted(baris_hapus_trx, reverse=True):
+                        ws_t.delete_rows(int(baris))
+                    st.success("Transaksi terpilih berhasil dihapus!")
+                    st.rerun()
+                else:
+                    st.warning("Pilih minimal 1 baris transaksi.")
+        else:
+            st.info("Belum ada riwayat transaksi.")
+
+# --- TAB 3: DASHBOARD & UNTUNG ---
+with tab3:
+    st.subheader("📊 Dashboard Keuangan & Profit")
+    
+    with st.expander("💰 Atur Modal Awal Hari Ini", expanded=False):
+        st.session_state['modal_cash'] = st.number_input("Cash di Laci (Rp):", value=st.session_state['modal_cash'], step=50000)
+        st.session_state['modal_digi'] = st.number_input("Saldo Digital (Rp):", value=st.session_state['modal_digi'], step=50000)
+
+    st.markdown("---")
+
+    st.markdown(f"""
+        <div class="metric-card-blue">
+            <h4 style="margin:0; color:#1f77b4;">💵 Cash di Laci</h4>
+            <h2 style="margin:5px 0 0 0; color:#333;">Rp {st.session_state['modal_cash']:,}</h2>
+        </div>
+        <div class="metric-card-blue">
+            <h4 style="margin:0; color:#1f77b4;">💳 Saldo Digital</h4>
+            <h2 style="margin:5px 0 0 0; color:#333;">Rp {st.session_state['modal_digi']:,}</h2>
+        </div>
+    """, unsafe_allow_html=True)
+    
+    st.markdown("---")
+    
+    profit_hari_ini = 0
+    if ws_t:
+        data_t = ws_t.get_all_values()
+        if len(data_t) > 1:
+            df_trx = pd.DataFrame(data_t[1:])
+            if len(df_trx.columns) >= 6:
+                df_trx['Tanggal'] = pd.to_datetime(df_trx.iloc[:, 0], errors='coerce').dt.strftime('%Y-%m-%d')
+                tgl_hari_ini = datetime.now(pytz.timezone('Asia/Jakarta')).strftime('%Y-%m-%d')
+                
+                df_hari_ini = df_trx[df_trx['Tanggal'] == tgl_hari_ini].copy()
+                if not df_hari_ini.empty:
+                    df_hari_ini['Profit_Val'] = pd.to_numeric(df_hari_ini.iloc[:, 5], errors='coerce').fillna(0)
+                    profit_hari_ini = df_hari_ini['Profit_Val'].sum()
+
+    st.markdown(f"""
+        <div class="metric-card-green">
+            <h4 style="margin:0; color:#2ca02c;">🔥 Total Keuntungan (Profit) Hari Ini</h4>
+            <h1 style="margin:5px 0 0 0; color:#2ca02c;">Rp {profit_hari_ini:,}</h1>
+        </div>
+    """, unsafe_allow_html=True)
+    
+    if st.button("💾 Simpan Rekap Harian ke Sheets", type="primary", use_container_width=True):
+        if ws_k:
+            tanggal = datetime.now(pytz.timezone('Asia/Jakarta')).strftime("%Y-%m-%d")
+            ws_k.append_row([tanggal, st.session_state['modal_cash'], st.session_state['modal_digi']])
+            st.success("Rekap harian berhasil dikirim ke Sheets!")
+
+    st.markdown("### 📈 Grafik Riwayat Profit Harian")
+    if ws_t:
+        data_t = ws_t.get_all_values()
+        if len(data_t) > 1:
+            df_trx_all = pd.DataFrame(data_t[1:])
+            if len(df_trx_all.columns) >= 6:
+                df_trx_all['Tanggal'] = pd.to_datetime(df_trx_all.iloc[:, 0], errors='coerce').dt.strftime('%Y-%m-%d')
+                df_trx_all['Profit_Val'] = pd.to_numeric(df_trx_all.iloc[:, 5], errors='coerce').fillna(0)
+                
+                df_profit_harian = df_trx_all.groupby('Tanggal')['Profit_Val'].sum().reset_index()
+                
+                fig_profit = px.bar(df_profit_harian, x='Tanggal', y='Profit_Val', 
+                                    labels={'Profit_Val': 'Keuntungan (Rp)', 'Tanggal': 'Tanggal'},
+                                    title="Grafik Keuntungan (Profit) Harian Toko")
+                st.plotly_chart(fig_profit, use_container_width=True)
+        else:
+            st.info("Belum ada data transaksi untuk ditampilkan dalam grafik profit.")
+
+# --- TAB 4: STOK BARANG ---
+with tab4:
     st.subheader("📦 Manajemen Stok Barang")
     
     with st.expander("➕ Tambah Barang Baru"):
@@ -330,116 +438,3 @@ with tab2:
                     st.rerun()
         else:
             st.info("Belum ada data stok.")
-
-with tab3:
-    st.subheader("📋 Kelola & Filter Riwayat Transaksi")
-    if ws_t:
-        data_t = ws_t.get_all_values()
-        if len(data_t) > 1:
-            df_t = pd.DataFrame(data_t[1:], columns=data_t[0])
-            df_t['No_Baris'] = range(2, len(df_t) + 2)
-            df_t['Tanggal_Saja'] = pd.to_datetime(df_t.iloc[:, 0], errors='coerce').dt.date
-            
-            st.write("### 🔍 Filter Pencarian")
-            col_f1, col_f2 = st.columns(2)
-            
-            with col_f1:
-                kolom_jenis = df_t.columns[1] if len(df_t.columns) > 1 else 'Jenis'
-                jenis_tersedia = ["Semua"] + df_t[kolom_jenis].unique().tolist()
-                pilih_filter_jenis = st.selectbox("Jenis Transaksi:", options=jenis_tersedia)
-                
-            with col_f2:
-                tanggal_tersedia = sorted(df_t['Tanggal_Saja'].dropna().unique(), reverse=True)
-                pilih_filter_tgl = st.selectbox("Tanggal Transaksi:", options=["Semua Tanggal"] + [str(t) for t in tanggal_tersedia])
-            
-            df_t_filtered = df_t.copy()
-            if pilih_filter_jenis != "Semua":
-                df_t_filtered = df_t_filtered[df_t_filtered[kolom_jenis] == pilih_filter_jenis]
-            if pilih_filter_tgl != "Semua Tanggal":
-                df_t_filtered = df_t_filtered[df_t_filtered['Tanggal_Saja'].astype(str) == pilih_filter_tgl]
-                
-            df_t_display = df_t_filtered.drop(columns=['Tanggal_Saja'])
-            
-            st.markdown("---")
-            st.dataframe(df_t_display, use_container_width=True)
-            
-            st.markdown("---")
-            st.write("### 🗑️ Hapus Transaksi Terpilih")
-            baris_hapus_trx = st.multiselect("Pilih Nomor Baris Transaksi:", options=df_t_filtered['No_Baris'].tolist(), key="del_trx")
-            if st.button("❌ Hapus Transaksi Terpilih", type="primary"):
-                if baris_hapus_trx:
-                    for baris in sorted(baris_hapus_trx, reverse=True):
-                        ws_t.delete_rows(int(baris))
-                    st.success("Transaksi terpilih berhasil dihapus!")
-                    st.rerun()
-                else:
-                    st.warning("Pilih minimal 1 baris transaksi.")
-        else:
-            st.info("Belum ada riwayat transaksi.")
-
-with tab4:
-    st.subheader("📊 Dashboard Keuangan & Profit")
-    
-    with st.expander("💰 Atur Modal Awal Hari Ini", expanded=False):
-        st.session_state['modal_cash'] = st.number_input("Cash di Laci (Rp):", value=st.session_state['modal_cash'], step=50000)
-        st.session_state['modal_digi'] = st.number_input("Saldo Digital (Rp):", value=st.session_state['modal_digi'], step=50000)
-
-    st.markdown("---")
-
-    st.markdown(f"""
-        <div class="metric-card-blue">
-            <h4 style="margin:0; color:#1f77b4;">💵 Cash di Laci</h4>
-            <h2 style="margin:5px 0 0 0; color:#333;">Rp {st.session_state['modal_cash']:,}</h2>
-        </div>
-        <div class="metric-card-blue">
-            <h4 style="margin:0; color:#1f77b4;">💳 Saldo Digital</h4>
-            <h2 style="margin:5px 0 0 0; color:#333;">Rp {st.session_state['modal_digi']:,}</h2>
-        </div>
-    """, unsafe_allow_html=True)
-    
-    st.markdown("---")
-    
-    profit_hari_ini = 0
-    if ws_t:
-        data_t = ws_t.get_all_values()
-        if len(data_t) > 1:
-            df_trx = pd.DataFrame(data_t[1:])
-            if len(df_trx.columns) >= 6:
-                df_trx['Tanggal'] = pd.to_datetime(df_trx.iloc[:, 0], errors='coerce').dt.strftime('%Y-%m-%d')
-                tgl_hari_ini = datetime.now(pytz.timezone('Asia/Jakarta')).strftime('%Y-%m-%d')
-                
-                df_hari_ini = df_trx[df_trx['Tanggal'] == tgl_hari_ini].copy()
-                if not df_hari_ini.empty:
-                    df_hari_ini['Profit_Val'] = pd.to_numeric(df_hari_ini.iloc[:, 5], errors='coerce').fillna(0)
-                    profit_hari_ini = df_hari_ini['Profit_Val'].sum()
-
-    st.markdown(f"""
-        <div class="metric-card-green">
-            <h4 style="margin:0; color:#2ca02c;">🔥 Total Keuntungan (Profit) Hari Ini</h4>
-            <h1 style="margin:5px 0 0 0; color:#2ca02c;">Rp {profit_hari_ini:,}</h1>
-        </div>
-    """, unsafe_allow_html=True)
-    
-    if st.button("💾 Simpan Rekap Harian ke Sheets", type="primary", use_container_width=True):
-        if ws_k:
-            tanggal = datetime.now(pytz.timezone('Asia/Jakarta')).strftime("%Y-%m-%d")
-            ws_k.append_row([tanggal, st.session_state['modal_cash'], st.session_state['modal_digi']])
-            st.success("Rekap harian berhasil dikirim ke Sheets!")
-
-    st.markdown("### 📈 Grafik Riwayat Profit Harian")
-    if ws_t:
-        data_t = ws_t.get_all_values()
-        if len(data_t) > 1:
-            df_trx_all = pd.DataFrame(data_t[1:])
-            if len(df_trx_all.columns) >= 6:
-                df_trx_all['Tanggal'] = pd.to_datetime(df_trx_all.iloc[:, 0], errors='coerce').dt.strftime('%Y-%m-%d')
-                df_trx_all['Profit_Val'] = pd.to_numeric(df_trx_all.iloc[:, 5], errors='coerce').fillna(0)
-                
-                df_profit_harian = df_trx_all.groupby('Tanggal')['Profit_Val'].sum().reset_index()
-                
-                fig_profit = px.bar(df_profit_harian, x='Tanggal', y='Profit_Val', 
-                                    labels={'Profit_Val': 'Keuntungan (Rp)', 'Tanggal': 'Tanggal'},
-                                    title="Grafik Keuntungan (Profit) Harian Toko")
-                st.plotly_chart(fig_profit, use_container_width=True)
-        else:
-            st.info("Belum ada data transaksi untuk ditampilkan dalam grafik profit.")
