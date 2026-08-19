@@ -96,7 +96,7 @@ def konek_gsheets():
         except: ws_k = sh.add_worksheet(title="Kas_Harian", rows=1000, cols=5)
 
         try: ws_s = sh.worksheet("Stok")
-        except: ws_s = sh.add_worksheet(title="Stok", rows=1000, cols=6)
+        except: ws_s = sh.add_worksheet(title="Stok", rows=1000, cols=7) # Diperluas untuk kolom Kategori (7 kolom)
             
         return sh, ws_t, ws_k, ws_s
     except: return None, None, None, None
@@ -199,7 +199,7 @@ with tab1:
             if ws_s:
                 stok_data = ws_s.get_all_values()
                 if len(stok_data) > 1:
-                    df_s_check = pd.DataFrame(stok_data[1:], columns=stok_data[0])
+                    df_s_check = pd.DataFrame(stok_data[1:], columns=stok_data[0][:6])
                     df_s_check['Row_Idx'] = range(2, len(df_s_check) + 2)
                     
                     match_barang = df_s_check[(df_s_check['Kode_Cepat'].str.upper() == code) | (df_s_check['Barcode'].str.upper() == code)]
@@ -331,6 +331,7 @@ with tab1:
                     for item in items:
                         if '+' in item or '-' in item:
                             nom_val = int(re.sub(r'[^0-9]', '', item))
+                            # Default: (+) jadi Tarik Tunai, (-) jadi Bank
                             kategori = 'Tarik Tunai' if '+' in item else 'Bank'
                             tanda_simbol = '+' if '+' in item else '-'
                             processed_data.append({'Tanda': tanda_simbol, 'Jenis Otomatis': kategori, 'Nominal (Rp)': nom_val})
@@ -339,25 +340,39 @@ with tab1:
 
         if st.session_state['draf_scan_smart']:
             st.markdown("---")
-            st.info(f"✨ Berhasil mendeteksi {len(st.session_state['draf_scan_smart'])} transaksi:")
+            st.info(f"✨ Berhasil mendeteksi {len(st.session_state['draf_scan_smart'])} transaksi. Silakan atur jenis transaksinya di bawah sebelum disimpan:")
             
-            df_preview_raw = pd.DataFrame(st.session_state['draf_scan_smart'])
-            df_preview_disp = df_preview_raw.copy()
-            df_preview_disp['Nominal (Rp)'] = df_preview_disp['Nominal (Rp)'].apply(lambda x: f_uang(x))
-            st.dataframe(df_preview_disp, use_container_width=True, hide_index=True)
+            # FITUR UBAH JENIS TRANSAKSI SATU PERSATU UNTUK HASIL OCR
+            updated_draf = []
+            for i, item in enumerate(st.session_state['draf_scan_smart']):
+                st.markdown(f"**Transaksi #{i+1} ({item['Tanda']})** - Nominal: {f_uang(item['Nominal (Rp)'])}")
+                pilihan_opsi = ["Bank", "E-Wallet", "Tarik Tunai", "Penjualan Barang", "Transaksi Lainnya"]
+                def_idx = pilihan_opsi.index(item['Jenis Otomatis']) if item['Jenis Otomatis'] in pilihan_opsi else 0
+                
+                jns_pilih = st.selectbox(f"Pilih Jenis untuk Trx #{i+1}", options=pilihan_opsi, index=def_idx, key=f"ocr_jns_{i}")
+                updated_draf.append({
+                    'Tanda': item['Tanda'],
+                    'Jenis Otomatis': jns_pilih,
+                    'Nominal (Rp)': item['Nominal (Rp)']
+                })
+                st.markdown("<hr style='margin:5px 0; border-color:#333;'>", unsafe_allow_html=True)
             
-            if st.button("💾 SIMPAN SEMUA TRANSAKSI", type="primary", use_container_width=True):
+            st.session_state['draf_scan_smart'] = updated_draf
+
+            if st.button("💾 SIMPAN SEMUA TRANSAKSI OCR", type="primary", use_container_width=True):
                 waktu = datetime.now(pytz.timezone('Asia/Jakarta')).strftime("%Y-%m-%d %H:%M:%S")
                 for item in st.session_state['draf_scan_smart']:
-                    nom, jenis = item['Nominal (Rp)'], item['Jenis Otomatis']
+                    nom = item['Nominal (Rp)']
+                    jenis = item['Jenis Otomatis']
                     admin = hitung_admin(nom, jenis)
                     total = nom - admin if jenis == "Tarik Tunai" else nom + admin
-                    if ws_t: ws_t.append_row([waktu, jenis, nom, admin, total, admin])
+                    profit_ocr = admin
+                    if ws_t: ws_t.append_row([waktu, jenis, nom, admin, total, profit_ocr])
                 st.session_state['draf_scan_smart'] = []
-                st.success("Tersimpan!")
+                st.success("Semua transaksi berhasil disimpan!")
                 st.rerun()
 
-# --- TAB 2: RIWAYAT (DENGAN KONFIRMASI HAPUS, EDIT, & TOTAL PROFIT FILTER) ---
+# --- TAB 2: RIWAYAT ---
 with tab2:
     st.subheader("📋 Daftar Riwayat Transaksi")
     if ws_t:
@@ -378,7 +393,6 @@ with tab2:
             if pilih_filter_jenis != "Semua": df_t_filtered = df_t_filtered[df_t_filtered[kolom_jenis] == pilih_filter_jenis]
             if pilih_filter_tgl != "Semua Tanggal": df_t_filtered = df_t_filtered[df_t_filtered['Tanggal_Saja'].astype(str) == pilih_filter_tgl]
             
-            # Hitung Total Profit dari filter yang sedang aktif
             profit_filter_val = pd.to_numeric(df_t_filtered.iloc[:, 5], errors='coerce').fillna(0).sum() if len(df_t_filtered) > 0 else 0
             st.markdown(f"""
                 <div style="background-color:#1E1E1E; padding:12px; border-radius:8px; border:1px solid #2ca02c; text-align:center; margin:15px 0;">
@@ -387,15 +401,13 @@ with tab2:
                 </div>
             """, unsafe_allow_html=True)
             
-            # Tombol Hapus Semua Riwayat dengan Konfirmasi
             with st.expander("⚠️ Hapus Semua Riwayat Transaksi"):
                 st.warning("PERINGATAN: Seluruh data riwayat transaksi akan dihapus permanen!")
                 konfirm_hapus_semua = st.checkbox("Saya yakin ingin menghapus semua riwayat", key="chk_del_all_trx")
                 if konfirm_hapus_semua:
                     if st.button("🗑️ Hapus Permanen Semua Riwayat", type="primary"):
-                        # Kosongkan sheet dengan menghapus semua baris kecuali header
                         ws_t.clear()
-                        ws_t.append_row(data_t[0]) # Kembalikan Header
+                        ws_t.append_row(data_t[0])
                         st.success("Semua riwayat berhasil dihapus!")
                         st.rerun()
 
@@ -409,7 +421,6 @@ with tab2:
                 
                 st.markdown(f"**{waktu_trx}** | <span style='color:#14B8A6;'>{jns_trx}</span><br>Nominal: {nom_trx} | Total: {tot_trx}", unsafe_allow_html=True)
                 
-                # TOMBOL KONFIRMASI HAPUS & EDIT
                 col_btn1, col_btn2 = st.columns(2)
                 with col_btn1:
                     if st.button("❌ Hapus", key=f"del_trx_{b_num}", use_container_width=True):
@@ -418,7 +429,6 @@ with tab2:
                     if st.button("✏️ Edit", key=f"edit_trx_{b_num}", use_container_width=True):
                         st.session_state[f"mode_edit_trx_{b_num}"] = True
                 
-                # Eksekusi Konfirmasi Hapus
                 if st.session_state.get(f"konfirm_trx_{b_num}", False):
                     st.error(f"Yakin ingin menghapus baris {b_num}?")
                     c_y, c_n = st.columns(2)
@@ -431,7 +441,6 @@ with tab2:
                         st.session_state[f"konfirm_trx_{b_num}"] = False
                         st.rerun()
 
-                # Eksekusi Edit Riwayat
                 if st.session_state.get(f"mode_edit_trx_{b_num}", False):
                     with st.form(key=f"form_edit_trx_{b_num}"):
                         st.write(f"Edit Transaksi Baris {b_num}")
@@ -442,8 +451,7 @@ with tab2:
                         e_tot = st.number_input("Total", value=int(row.iloc[4]) if str(row.iloc[4]).isdigit() else 0, step=1000)
                         e_prof = st.number_input("Profit", value=int(row.iloc[5]) if str(row.iloc[5]).isdigit() else 0, step=1000)
                         
-                        btn_save_edit = st.form_submit_button("Simpan Perubahan")
-                        if btn_save_edit:
+                        if st.form_submit_button("Simpan Perubahan"):
                             ws_t.update(f"A{b_num}:F{b_num}", [[e_waktu, e_jenis, e_nom, e_adm, e_tot, e_prof]])
                             st.session_state[f"mode_edit_trx_{b_num}"] = False
                             st.success("Perubahan disimpan!")
@@ -503,7 +511,6 @@ with tab3:
     total_cash_sistem = st.session_state['modal_cash'] + tot_transaksi_cash
     total_digi_sistem = st.session_state['modal_digi'] + tot_transaksi_digi
 
-    # Cash di Laci Card
     st.markdown(f"""
         <div class="metric-card-blue">
             <h4 style="margin:0; color:#14B8A6;">💵 Cash di Laci</h4>
@@ -522,7 +529,6 @@ with tab3:
 
     st.markdown("---")
 
-    # Saldo Digital Card
     st.markdown(f"""
         <div class="metric-card-blue">
             <h4 style="margin:0; color:#14B8A6;">💳 Saldo Digital</h4>
@@ -559,11 +565,12 @@ with tab3:
             fig_profit = px.bar(df_profit_harian, x='Tanggal', y='Profit_Val', template="plotly_dark", color_discrete_sequence=['#14B8A6'])
             st.plotly_chart(fig_profit, use_container_width=True)
 
-# --- TAB 4: STOK BARANG (DENGAN HARGA MODAL, KONFIRMASI HAPUS, & EDIT) ---
+# --- TAB 4: STOK BARANG (DENGAN KATEGORI & FILTER KATEGORI) ---
 with tab4:
     with st.expander("➕ Tambah Barang Baru"):
         barcode_input = st.text_input("Nomor Barcode / Label:")
         nama_barang = st.text_input("Nama Barang:")
+        kategori_barang = st.text_input("Kategori Barang (Contoh: Perdana, Voucher, Aksesoris):", value="Umum")
         stok_awal = st.number_input("Jumlah Stok:", min_value=1, step=1)
         
         harga_modal = st.number_input("Harga Modal (Rp):", min_value=0, step=1000)
@@ -576,7 +583,8 @@ with tab4:
         
         if st.button("💾 Simpan Barang", type="primary", use_container_width=True):
             if ws_s and nama_barang:
-                ws_s.append_row([barcode_input, nama_barang, stok_awal, harga_modal, harga_jual, kode_cepat_brg])
+                # Kolom: Barcode, Nama_Barang, Stok, Harga_Modal, Harga_Jual, Kode_Cepat, Kategori
+                ws_s.append_row([barcode_input, nama_barang, stok_awal, harga_modal, harga_jual, kode_cepat_brg, kategori_barang])
                 st.success("Tersimpan!")
                 st.rerun()
 
@@ -585,29 +593,41 @@ with tab4:
     if ws_s:
         data_s = ws_s.get_all_values()
         if len(data_s) > 1:
-            df_s = pd.DataFrame(data_s[1:], columns=data_s[0])
+            df_s = pd.DataFrame(data_s[1:], columns=data_s[0][:7]) # Ambil sampai 7 kolom
             df_s['No_Baris'] = range(2, len(df_s) + 2)
             
-            for index, row in df_s.iterrows():
+            # Jika kolom kategori belum ada di data lama, beri nilai default 'Umum'
+            if 'Kategori' not in df_s.columns:
+                df_s['Kategori'] = 'Umum'
+
+            # FILTER BERDASARKAN KATEGORI BARANG
+            list_kategori = ["Semua Kategori"] + df_s['Kategori'].dropna().unique().tolist()
+            pilih_filter_kat = st.selectbox("Filter Berdasarkan Kategori:", options=list_kategori)
+            
+            df_s_filtered = df_s.copy()
+            if pilih_filter_kat != "Semua Kategori":
+                df_s_filtered = df_s_filtered[df_s_filtered['Kategori'] == pilih_filter_kat]
+
+            st.markdown("---")
+            for index, row in df_s_filtered.iterrows():
                 b_stok = int(row['No_Baris'])
                 bc = row.iloc[0]
                 nm = row.iloc[1]
                 stk = row.iloc[2]
                 h_modal = f_uang(row.iloc[3]) if str(row.iloc[3]).isdigit() else row.iloc[3]
                 h_jual = f_uang(row.iloc[4]) if str(row.iloc[4]).isdigit() else row.iloc[4]
+                kat = row.iloc[6] if len(row) > 6 and row.iloc[6] else "Umum"
                 
-                st.markdown(f"**{nm}** (Stok: <span style='color:#14B8A6;'>{stk}</span>)<br>Modal: {h_modal} | Jual: {h_jual}<br>Barcode: {bc}", unsafe_allow_html=True)
+                st.markdown(f"**{nm}** | <span style='color:#14B8A6;'>[{kat}]</span> (Stok: {stk})<br>Modal: {h_modal} | Jual: {h_jual}<br>Barcode: {bc}", unsafe_allow_html=True)
                 
-                # TOMBOL KONFIRMASI HAPUS & EDIT STOK
                 col_stk1, col_stk2 = st.columns(2)
                 with col_stk1:
                     if st.button("❌ Hapus", key=f"del_stk_{b_stok}", use_container_width=True):
                         st.session_state[f"konfirm_stk_{b_stok}"] = True
                 with col_stk2:
                     if st.button("✏️ Edit", key=f"edit_stok_btn_{b_stok}", use_container_width=True):
-                        st.session_state[f"mode_edit_stk_{b_num}"] = True
+                        st.session_state[f"mode_edit_stk_{b_stok}"] = True
                 
-                # Konfirmasi Hapus Stok
                 if st.session_state.get(f"konfirm_stk_{b_stok}", False):
                     st.error(f"Yakin ingin menghapus {nm}?")
                     cs_y, cs_n = st.columns(2)
@@ -620,8 +640,7 @@ with tab4:
                         st.session_state[f"konfirm_stk_{b_stok}"] = False
                         st.rerun()
 
-                # Form Edit Stok Langsung di Baris / Expander
-                if st.session_state.get(f"mode_edit_stk_{b_num}", False):
+                if st.session_state.get(f"mode_edit_stk_{b_stok}", False):
                     with st.form(key=f"form_edit_stok_{b_stok}"):
                         st.write(f"Edit Data: {nm}")
                         es_bc = st.text_input("Barcode", value=row.iloc[0])
@@ -630,10 +649,11 @@ with tab4:
                         es_mod = st.number_input("Harga Modal", value=int(row.iloc[3]) if str(row.iloc[3]).isdigit() else 0, step=1000)
                         es_jul = st.number_input("Harga Jual", value=int(row.iloc[4]) if str(row.iloc[4]).isdigit() else 0, step=1000)
                         es_kod = st.text_input("Kode Cepat", value=row.iloc[5])
+                        es_kat = st.text_input("Kategori", value=kat)
                         
                         if st.form_submit_button("Simpan Perubahan Stok"):
-                            ws_s.update(f"A{b_stok}:F{b_stok}", [[es_bc, es_nm, es_stk, es_mod, es_jul, es_kod]])
-                            st.session_state[f"mode_edit_stk_{b_num}"] = False
+                            ws_s.update(f"A{b_stok}:G{b_stok}", [[es_bc, es_nm, es_stk, es_mod, es_jul, es_kod, es_kat]])
+                            st.session_state[f"mode_edit_stk_{b_stok}"] = False
                             st.success("Stok diperbarui!")
                             st.rerun()
 
