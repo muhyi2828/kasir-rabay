@@ -239,26 +239,29 @@ with tab1:
             st.caption("Keuntungan Manual (Rp):")
             profit_manual = st.number_input("Profit", value=0, step=1000, label_visibility="collapsed")
 
-        if nominal_trx > 0 or (jenis_terpilih == "Transaksi Lainnya" and nominal_trx >= 0):
+        # LOGIKA PERHITUNGAN TRANSAKSI
+        if nominal_trx > 0 or (jenis_terpilih == "Transaksi Lainnya" and (nominal_trx > 0 or profit_manual > 0)):
             if jenis_terpilih == "Penjualan Barang":
                 admin = 0
                 total_uang = nominal_trx
                 profit_bersih = profit_brg_det if profit_brg_det > 0 else 0
             elif jenis_terpilih == "Transaksi Lainnya":
-                admin = 0
-                total_uang = nominal_trx
-                profit_bersih = profit_manual
+                admin = profit_manual  # Admin otomatis terisi dari Cuan Manual yang diinput
+                total_uang = nominal_trx + admin
+                profit_bersih = admin
             else:
                 admin = hitung_admin(nominal_trx, jenis_terpilih)
                 total_uang = nominal_trx + admin if jenis_terpilih != "Tarik Tunai" else nominal_trx - admin
                 profit_bersih = admin
                 
-                c1, c2 = st.columns(2)
-                c1.metric("Admin (Cuan)", f"{f_uang(admin)}")
-                if jenis_terpilih == "Tarik Tunai":
-                    c2.metric("Berikan Tunai", f"{f_uang(total_uang)}")
-                else:
-                    c2.metric("Tagih Pelanggan", f"{f_uang(total_uang)}")
+            c1, c2 = st.columns(2)
+            c1.metric("Admin (Cuan)", f"{f_uang(admin)}")
+            if jenis_terpilih == "Tarik Tunai":
+                c2.metric("Berikan Tunai", f"{f_uang(total_uang)}")
+            elif jenis_terpilih == "Transaksi Lainnya" or jenis_terpilih == "Penjualan Barang":
+                c2.metric("Total Pemasukan", f"{f_uang(total_uang)}")
+            else:
+                c2.metric("Tagih Pelanggan", f"{f_uang(total_uang)}")
             
             st.markdown("<br>", unsafe_allow_html=True)
             col_b1, col_b2 = st.columns(2)
@@ -271,7 +274,7 @@ with tab1:
                             stok_skrg = int(ws_s.cell(row_brg_det, 3).value)
                             if stok_skrg > 0: ws_s.update_cell(row_brg_det, 3, stok_skrg - 1)
                     elif jenis_terpilih == "Transaksi Lainnya":
-                        st.session_state['modal_cash'] += nominal_trx
+                        st.session_state['modal_cash'] += total_uang
                     elif jenis_terpilih == "Tarik Tunai":
                         st.session_state['modal_cash'] -= total_uang
                         st.session_state['modal_digi'] += nominal_trx
@@ -317,7 +320,7 @@ with tab1:
                         if ws_s and r_stok:
                             stok_skrg = int(ws_s.cell(r_stok, 3).value)
                             if stok_skrg > 0: ws_s.update_cell(r_stok, 3, stok_skrg - 1)
-                    elif j_trx == "Transaksi Lainnya": st.session_state['modal_cash'] += nom_trx
+                    elif j_trx == "Transaksi Lainnya": st.session_state['modal_cash'] += tot_trx
                     elif j_trx == "Tarik Tunai":
                         st.session_state['modal_cash'] -= tot_trx
                         st.session_state['modal_digi'] += nom_trx
@@ -412,8 +415,9 @@ with tab2:
             
             st.dataframe(df_t_display, use_container_width=True)
             
-            baris_hapus_trx = st.multiselect("Hapus Transaksi (No Baris):", options=df_t_filtered['No_Baris'].tolist())
-            if st.button("❌ Hapus Terpilih", type="primary"):
+            baris_hapus_trx = st.multiselect("Hapus Transaksi (No Baris):", options=df_t_filtered['No_Baris'].tolist(), key="hapus_trx_multi")
+            # --- PENAMBAHAN KEY PADA TOMBOL UNTUK MENGHINDARI ERROR DUPLIKASI ---
+            if st.button("❌ Hapus Terpilih", type="primary", key="btn_hapus_trx"):
                 if baris_hapus_trx:
                     for baris in sorted(baris_hapus_trx, reverse=True): ws_t.delete_rows(int(baris))
                     st.success("Terhapus!")
@@ -530,8 +534,9 @@ with tab4:
                         st.success("Updated!")
                         st.rerun()
 
-            baris_hapus_stok = st.multiselect("Hapus Stok (No Baris):", options=df_s['No_Baris'].tolist())
-            if st.button("❌ Hapus Terpilih", type="primary"):
+            baris_hapus_stok = st.multiselect("Hapus Stok (No Baris):", options=df_s['No_Baris'].tolist(), key="hapus_stok_multi")
+            # --- PENAMBAHAN KEY PADA TOMBOL UNTUK MENGHINDARI ERROR DUPLIKASI ---
+            if st.button("❌ Hapus Terpilih", type="primary", key="btn_hapus_stok"):
                 if baris_hapus_stok:
                     for b in sorted(baris_hapus_stok, reverse=True): ws_s.delete_rows(int(b))
                     st.rerun()
