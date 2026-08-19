@@ -9,7 +9,7 @@ import json
 from datetime import datetime
 import pytz
 
-st.set_page_config(page_title="Kasir RABAY CELL PRO", layout="centered")
+st.set_page_config(page_title="RABAY CELL PRO - ERP SYSTEM", layout="centered")
 
 @st.cache_resource
 def konek_gsheets():
@@ -24,20 +24,23 @@ def konek_gsheets():
             
         try: ws_k = sh.worksheet("Kas_Harian")
         except: ws_k = sh.add_worksheet(title="Kas_Harian", rows=1000, cols=5)
+
+        try: ws_s = sh.worksheet("Stok")
+        except: ws_s = sh.add_worksheet(title="Stok", rows=1000, cols=6)
             
-        return sh, ws_t, ws_k
-    except: return None, None, None
+        return sh, ws_t, ws_k, ws_s
+    except: return None, None, None, None
 
-db, ws_t, ws_k = konek_gsheets()
+db, ws_t, ws_k, ws_s = konek_gsheets()
 
-# 2. STATE MANAGEMENT
+# STATE MANAGEMENT
 if 'modal_cash' not in st.session_state: st.session_state['modal_cash'] = 0
 if 'modal_digi' not in st.session_state: st.session_state['modal_digi'] = 0
 if 'input_nominal' not in st.session_state: st.session_state['input_nominal'] = 0
 if 'input_jenis' not in st.session_state: st.session_state['input_jenis'] = "Bank"
 if 'draf_scan' not in st.session_state: st.session_state['draf_scan'] = []
 
-st.title("🚀 Kasir RABAY CELL PRO")
+st.title("🚀 RABAY CELL PRO - Kasir & Stok")
 
 with st.expander("💰 Modal Awal Hari Ini"):
     st.session_state['modal_cash'] = st.number_input("Cash di Laci (Rp):", value=st.session_state['modal_cash'], step=50000)
@@ -81,20 +84,36 @@ def hitung_admin(nominal, jenis):
             kelipatan = -(-sisa // 5000000)
             return 35000 + (kelipatan * 5000)
 
-tab1, tab2, tab3 = st.tabs(["⚡ Input Transaksi", "📋 Riwayat Transaksi", "📊 Dashboard & Grafik"])
+tab1, tab2, tab3, tab4 = st.tabs(["⚡ Transaksi", "📦 Stok Barang", "📋 Riwayat", "📊 Dashboard"])
 
 with tab1:
     st.subheader("Pilih Metode Input")
     metode = st.radio("Metode:", ["Ketik Manual / Kode Cepat", "Scan Foto Mutasi (Banyak)"], horizontal=True)
     
     if metode == "Ketik Manual / Kode Cepat":
-        quick = st.text_input("Kode Cepat (Contoh: TF100, EW50, TK200) atau kosongkan untuk manual:")
+        quick = st.text_input("Kode Cepat (Contoh: TF100, EW50, TK200, atau Kode Barang Stok):")
         if quick:
             code = quick.upper().strip()
-            st.session_state['input_jenis'] = "E-Wallet" if code.startswith("EW") else "Tarik Tunai" if code.startswith("TK") else "Bank"
-            angka_str = re.sub(r'[^0-9.]', '', code)
-            try: st.session_state['input_nominal'] = int(float(angka_str) * 1000)
-            except: pass
+            # Cek apakah itu kode barang dari database stok
+            if ws_s:
+                stok_data = ws_s.get_all_values()
+                if len(stok_data) > 1:
+                    df_s_check = pd.DataFrame(stok_data[1:], columns=stok_data[0])
+                    match_barang = df_s_check[df_s_check['Kode_Cepat'].str.upper() == code]
+                    if not match_barang.empty:
+                        namabarang = match_barang.iloc[0]['Nama_Barang']
+                        hargajual = int(match_barang.iloc[0]['Harga_Jual'])
+                        st.success(f"📦 Barang Terdeteksi: **{namabarang}** - Harga Jual: Rp {hargajual:,}")
+                        st.session_state['input_jenis'] = "Bank"
+                        st.session_state['input_nominal'] = hargajual
+
+            if not quick.upper().startswith("TF") and not quick.upper().startswith("EW") and not quick.upper().startswith("TK"):
+                pass
+            else:
+                st.session_state['input_jenis'] = "E-Wallet" if code.startswith("EW") else "Tarik Tunai" if code.startswith("TK") else "Bank"
+                angka_str = re.sub(r'[^0-9.]', '', code)
+                try: st.session_state['input_nominal'] = int(float(angka_str) * 1000)
+                except: pass
 
         st.markdown("---")
         st.session_state['input_jenis'] = st.radio("Jenis Transaksi:", ["Bank", "E-Wallet", "Tarik Tunai"], 
@@ -168,9 +187,50 @@ with tab1:
                 st.success("Semua data berhasil disimpan & kas terupdate!")
                 st.rerun()
 
-# --- TAB 2: RIWAYAT TRANSAKSI (HAPUS MASSAL) ---
+# --- TAB 2: STOK BARANG & BARCODE ---
 with tab2:
-    st.subheader("📋 Kelola Riwayat Transaksi Terakhir")
+    st.subheader("📦 Manajemen Stok Barang & Barcode")
+    
+    with st.form("form_tambah_stok", clear_on_submit=True):
+        st.write("### Tambah / Input Barang Baru")
+        barcode_input = st.text_input("Nomor Barcode / Label:")
+        nama_barang = st.text_input("Nama Barang:")
+        stok_awal = st.number_input("Jumlah Stok:", min_value=1, step=1)
+        harga_modal = st.number_input("Harga Modal (Rp):", min_value=0, step=1000)
+        harga_jual = st.number_input("Harga Jual (Rp):", min_value=0, step=1000)
+        kode_cepat_brg = st.text_input("Kode Cepat Barang (Contoh: VCG1, perdana1):")
+        
+        submit_stok = st.form_submit_button("💾 Simpan Barang ke Database Stok")
+        if submit_stok:
+            if ws_s and nama_barang:
+                ws_s.append_row([barcode_input, nama_barang, stok_awal, harga_modal, harga_jual, kode_cepat_brg])
+                st.success(f"Barang **{nama_barang}** berhasil ditambahkan ke stok!")
+                st.rerun()
+            else:
+                st.warning("Nama barang wajib diisi!")
+
+    st.markdown("---")
+    st.subheader("📋 Daftar Stok Tersedia")
+    if ws_s:
+        data_s = ws_s.get_all_values()
+        if len(data_s) > 1:
+            df_s = pd.DataFrame(data_s[1:], columns=data_s[0])
+            df_s['No_Baris'] = range(2, len(df_s) + 2)
+            st.dataframe(df_s, use_container_width=True)
+            
+            baris_hapus_stok = st.multiselect("Pilih Baris Stok yang ingin dihapus:", options=df_s['No_Baris'].tolist(), key="del_stok")
+            if st.button("❌ Hapus Stok Terpilih", type="primary"):
+                if baris_hapus_stok:
+                    for b in sorted(baris_hapus_stok, reverse=True):
+                        ws_s.delete_rows(int(b))
+                    st.success("Stok berhasil dihapus!")
+                    st.rerun()
+        else:
+            st.info("Belum ada data stok barang.")
+
+# --- TAB 3: RIWAYAT TRANSAKSI ---
+with tab3:
+    st.subheader("📋 Kelola Riwayat Transaksi")
     if ws_t:
         data_t = ws_t.get_all_values()
         if len(data_t) > 1:
@@ -178,32 +238,19 @@ with tab2:
             df_t['No_Baris'] = range(2, len(df_t) + 2)
             st.dataframe(df_t, use_container_width=True)
             
-            st.markdown("---")
-            st.write("### 🗑️ Hapus Transaksi Sekaligus")
-            st.caption("Pilih satu atau banyak nomor baris yang ingin dihapus. Baris akan dihapus dari Google Sheets.")
-            
-            # Pilihan Banyak (Multiselect)
-            baris_hapus_trx = st.multiselect("Pilih Nomor Baris:", options=df_t['No_Baris'].tolist())
-            
+            baris_hapus_trx = st.multiselect("Pilih Nomor Baris Transaksi:", options=df_t['No_Baris'].tolist(), key="del_trx")
             if st.button("❌ Hapus Transaksi Terpilih", type="primary"):
                 if baris_hapus_trx:
-                    try:
-                        # Logika Pintar: Hapus dari urutan terbawah agar baris atasnya tidak bergeser
-                        for baris in sorted(baris_hapus_trx, reverse=True):
-                            ws_t.delete_rows(int(baris))
-                        st.success(f"Berhasil menghapus baris: {baris_hapus_trx}!")
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"Gagal menghapus: {e}")
-                else:
-                    st.warning("Silakan pilih minimal 1 baris untuk dihapus.")
+                    for baris in sorted(baris_hapus_trx, reverse=True):
+                        ws_t.delete_rows(int(baris))
+                    st.success("Transaksi terpilih berhasil dihapus!")
+                    st.rerun()
         else:
-            st.info("Belum ada riwayat transaksi tersimpan.")
+            st.info("Belum ada riwayat transaksi.")
 
-# --- TAB 3: DASHBOARD REKAP (HAPUS REKAP) ---
-with tab3:
+# --- TAB 4: DASHBOARD REKAP ---
+with tab4:
     st.subheader("📊 Posisi Keuangan & Grafik Bulanan")
-    
     c1, c2 = st.columns(2)
     c1.metric("Cash di Laci", f"Rp {st.session_state['modal_cash']:,}")
     c2.metric("Saldo Digital", f"Rp {st.session_state['modal_digi']:,}")
@@ -220,7 +267,7 @@ with tab3:
         data_k = ws_k.get_all_values()
         if len(data_k) > 1:
             df_k = pd.DataFrame(data_k[1:], columns=data_k[0])
-            df_k['No_Baris'] = range(2, len(df_k) + 2)  # Menentukan baris asli di Google Sheets
+            df_k['No_Baris'] = range(2, len(df_k) + 2)
             df_k['Tanggal'] = pd.to_datetime(df_k['Tanggal'])
             df_k['Bulan'] = df_k['Tanggal'].dt.strftime('%B %Y')
             
@@ -234,21 +281,12 @@ with tab3:
                           title=f"Grafik Perkembangan Kas - {bulan_pilih}")
             st.plotly_chart(fig, use_container_width=True)
             
-            st.markdown("---")
-            st.write("### 🗑️ Hapus Rekap Harian Salah")
-            baris_hapus_rekap = st.multiselect("Pilih Nomor Baris Rekap:", options=df_k['No_Baris'].tolist())
-            
+            baris_hapus_rekap = st.multiselect("Pilih Nomor Baris Rekap:", options=df_k['No_Baris'].tolist(), key="del_rekap")
             if st.button("❌ Hapus Rekap Terpilih", type="primary"):
                 if baris_hapus_rekap:
-                    try:
-                        # Logika Pintar yang sama: Hapus dari bawah ke atas
-                        for baris in sorted(baris_hapus_rekap, reverse=True):
-                            ws_k.delete_rows(int(baris))
-                        st.success(f"Berhasil menghapus rekap baris: {baris_hapus_rekap}!")
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"Gagal menghapus rekap: {e}")
-                else:
-                    st.warning("Silakan pilih minimal 1 baris rekap untuk dihapus.")
+                    for baris in sorted(baris_hapus_rekap, reverse=True):
+                        ws_k.delete_rows(int(baris))
+                    st.success("Rekap terpilih berhasil dihapus!")
+                    st.rerun()
         else:
-            st.info("Belum ada data rekap di Google Sheets.")
+            st.info("Belum ada data rekap.")
