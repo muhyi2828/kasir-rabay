@@ -244,7 +244,6 @@ with tab1:
             st.markdown("---")
             st.write("### 🛒 Daftar Keranjang Belanjaan Aktif")
             
-            # Format dataframe keranjang agar angka nominalnya cantik
             df_cart_raw = pd.DataFrame(st.session_state['keranjang_belanja'])
             df_cart_display = df_cart_raw.copy()
             df_cart_display['Nominal'] = df_cart_display['Nominal'].apply(lambda x: f_uang(x))
@@ -325,7 +324,6 @@ with tab1:
             jumlah_draf = len(st.session_state['draf_scan_smart'])
             st.info(f"✨ Berhasil mendeteksi {jumlah_draf} transaksi dari gambar:")
             
-            # Format preview hasil scan agar nominalnya rapi beritik
             df_preview_raw = pd.DataFrame(st.session_state['draf_scan_smart'])
             df_preview_disp = df_preview_raw.copy()
             df_preview_disp['Nominal (Rp)'] = df_preview_disp['Nominal (Rp)'].apply(lambda x: f_uang(x))
@@ -384,7 +382,6 @@ with tab2:
                 
             df_t_display = df_t_filtered.drop(columns=['Tanggal_Saja'])
             
-            # Format kolom angka riwayat agar pakai titik ribuan
             for c_nm in ['Nominal', 'Admin', 'Total', 'Profit']:
                 if c_nm in df_t_display.columns:
                     df_t_display[c_nm] = df_t_display[c_nm].apply(lambda x: f_uang(x) if str(x).isdigit() else x)
@@ -483,23 +480,29 @@ with tab3:
 with tab4:
     st.subheader("📦 Manajemen Stok Barang")
     
-    with st.expander("➕ Tambah Barang Baru"):
-        with st.form("form_tambah_stok", clear_on_submit=True):
-            barcode_input = st.text_input("Nomor Barcode / Label:")
-            nama_barang = st.text_input("Nama Barang:")
-            stok_awal = st.number_input("Jumlah Stok:", min_value=1, step=1)
-            harga_modal = st.number_input("Harga Modal (Rp):", min_value=0, step=1000)
-            harga_jual = st.number_input("Harga Jual (Rp):", min_value=0, step=1000)
-            kode_cepat_brg = st.text_input("Kode Cepat Barang (Contoh: SPI, VCG1):")
+    with st.expander("➕ Tambah Barang Baru", expanded=True):
+        barcode_input = st.text_input("Nomor Barcode / Label:")
+        nama_barang = st.text_input("Nama Barang:")
+        stok_awal = st.number_input("Jumlah Stok:", min_value=1, step=1)
+        
+        harga_modal = st.number_input("Harga Modal (Rp):", min_value=0, step=1000)
+        if harga_modal > 0:
+            st.caption(f"👀 Terbaca: **{f_uang(harga_modal)}**")
             
-            submit_stok = st.form_submit_button("💾 Simpan Barang Baru")
-            if submit_stok:
-                if ws_s and nama_barang:
-                    ws_s.append_row([barcode_input, nama_barang, stok_awal, harga_modal, harga_jual, kode_cepat_brg])
-                    st.success(f"Barang **{nama_barang}** berhasil ditambahkan!")
-                    st.rerun()
-                else:
-                    st.warning("Nama barang wajib diisi!")
+        harga_jual = st.number_input("Harga Jual (Rp):", min_value=0, step=1000)
+        if harga_jual > 0:
+            st.caption(f"👀 Terbaca: **{f_uang(harga_jual)}**")
+            
+        kode_cepat_brg = st.text_input("Kode Cepat Barang (Contoh: SPI, VCG1):")
+        
+        submit_stok = st.button("💾 Simpan Barang Baru", type="primary", use_container_width=True)
+        if submit_stok:
+            if ws_s and nama_barang:
+                ws_s.append_row([barcode_input, nama_barang, stok_awal, harga_modal, harga_jual, kode_cepat_brg])
+                st.success(f"Barang **{nama_barang}** berhasil ditambahkan!")
+                st.rerun()
+            else:
+                st.warning("Nama barang wajib diisi!")
 
     st.markdown("---")
     st.subheader("📋 Daftar Stok Tersedia")
@@ -509,7 +512,6 @@ with tab4:
             df_s = pd.DataFrame(data_s[1:], columns=data_s[0])
             df_s['No_Baris'] = range(2, len(df_s) + 2)
             
-            # Format harga modal dan harga jual agar menggunakan titik ribuan di tabel
             if 'Harga_Modal' in df_s.columns:
                 df_s['Harga_Modal'] = df_s['Harga_Modal'].apply(lambda x: f_uang(x) if str(x).isdigit() else x)
             if 'Harga_Jual' in df_s.columns:
@@ -529,20 +531,26 @@ with tab4:
                     row_data = ws_s.row_values(pilih_baris_edit)
                     while len(row_data) < 6: row_data.append("")
                     
-                    with st.form("form_edit_stok"):
-                        st.write(f"Sedang mengedit: **{pilih_nama_edit}**")
-                        edit_barcode = st.text_input("Barcode / Label:", value=row_data[0])
-                        edit_nama = st.text_input("Nama Barang:", value=row_data[1])
-                        edit_stok = st.number_input("Jumlah Stok:", value=int(row_data[2]) if row_data[2].isdigit() else 0, step=1)
-                        edit_modal = st.number_input("Harga Modal (Rp):", value=int(row_data[3]) if row_data[3].isdigit() else 0, step=1000)
-                        edit_jual = st.number_input("Harga Jual (Rp):", value=int(row_data[4]) if row_data[4].isdigit() else 0, step=1000)
-                        edit_kode = st.text_input("Kode Cepat Barang:", value=row_data[5])
+                    st.write(f"Sedang mengedit: **{pilih_nama_edit}**")
+                    edit_barcode = st.text_input("Barcode / Label:", value=row_data[0])
+                    edit_nama = st.text_input("Nama Barang:", value=row_data[1])
+                    edit_stok = st.number_input("Jumlah Stok:", value=int(row_data[2]) if row_data[2].isdigit() else 0, step=1)
+                    
+                    edit_modal = st.number_input("Edit Harga Modal (Rp):", value=int(row_data[3]) if row_data[3].isdigit() else 0, step=1000)
+                    if edit_modal > 0:
+                        st.caption(f"👀 Terbaca: **{f_uang(edit_modal)}**")
                         
-                        btn_update = st.form_submit_button("🔄 Update Perubahan Stok", type="primary")
-                        if btn_update:
-                            ws_s.update(f"A{pilih_baris_edit}:F{pilih_baris_edit}", [[edit_barcode, edit_nama, edit_stok, edit_modal, edit_jual, edit_kode]])
-                            st.success(f"Data barang **{edit_nama}** berhasil diperbarui!")
-                            st.rerun()
+                    edit_jual = st.number_input("Edit Harga Jual (Rp):", value=int(row_data[4]) if row_data[4].isdigit() else 0, step=1000)
+                    if edit_jual > 0:
+                        st.caption(f"👀 Terbaca: **{f_uang(edit_jual)}**")
+                        
+                    edit_kode = st.text_input("Kode Cepat Barang:", value=row_data[5])
+                    
+                    btn_update = st.button("🔄 Update Perubahan Stok", type="primary", use_container_width=True)
+                    if btn_update:
+                        ws_s.update(f"A{pilih_baris_edit}:F{pilih_baris_edit}", [[edit_barcode, edit_nama, edit_stok, edit_modal, edit_jual, edit_kode]])
+                        st.success(f"Data barang **{edit_nama}** berhasil diperbarui!")
+                        st.rerun()
 
             st.markdown("---")
             baris_hapus_stok = st.multiselect("Pilih Baris Stok yang ingin dihapus:", options=df_s['No_Baris'].tolist(), key="del_stok")
