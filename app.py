@@ -331,6 +331,7 @@ with tab1:
                     for item in items:
                         if '+' in item or '-' in item:
                             nom_val = int(re.sub(r'[^0-9]', '', item))
+                            # (+) otomatis Tarik Tunai, (-) otomatis Bank
                             kategori = 'Tarik Tunai' if '+' in item else 'Bank'
                             tanda_simbol = '+' if '+' in item else '-'
                             processed_data.append({'Tanda': tanda_simbol, 'Jenis Otomatis': kategori, 'Nominal (Rp)': nom_val})
@@ -339,23 +340,58 @@ with tab1:
 
         if st.session_state['draf_scan_smart']:
             st.markdown("---")
-            st.info(f"✨ Berhasil mendeteksi {len(st.session_state['draf_scan_smart'])} transaksi. Silakan atur jenis transaksinya di bawah sebelum disimpan:")
+            st.info(f"✨ Berhasil mendeteksi {len(st.session_state['draf_scan_smart'])} transaksi.")
             
+            # TOMBOL UBAH SEMUA JENIS MIN (-) SEKALIGUS
+            st.markdown("<b>Ubah Jenis Semua Transaksi Minus (-) Sekaligus:</b>", unsafe_allow_html=True)
+            mass_minus_choice = st.selectbox("Pilih Jenis untuk Semua Min (-)", options=["Bank", "E-Wallet", "Tarik Tunai"], key="mass_min_select")
+            if st.button("🔄 Terapkan ke Semua Min (-)", use_container_width=True):
+                for item in st.session_state['draf_scan_smart']:
+                    if item['Tanda'] == '-':
+                        item['Jenis Otomatis'] = mass_minus_choice
+                st.success("Semua transaksi minus (-) berhasil diubah!")
+                st.rerun()
+
+            st.markdown("<br>", unsafe_allow_html=True)
             updated_draf = []
+            indices_to_delete = []
+            
             for i, item in enumerate(st.session_state['draf_scan_smart']):
-                st.markdown(f"**Transaksi #{i+1} ({item['Tanda']})** - Nominal: {f_uang(item['Nominal (Rp)'])}")
-                pilihan_opsi = ["Bank", "E-Wallet", "Tarik Tunai", "Penjualan Barang", "Transaksi Lainnya"]
-                def_idx = pilihan_opsi.index(item['Jenis Otomatis']) if item['Jenis Otomatis'] in pilihan_opsi else 0
+                # Header Baris & Tombol Hapus Kecil
+                col_h1, col_h2 = st.columns([5, 1])
+                with col_h1:
+                    st.markdown(f"**Trx #{i+1} ({item['Tanda']})** - {f_uang(item['Nominal (Rp)'])}")
+                with col_h2:
+                    if st.button("❌", key=f"del_ocr_{i}", help="Hapus item ini"):
+                        indices_to_delete.append(i)
                 
-                jns_pilih = st.selectbox(f"Pilih Jenis untuk Trx #{i+1}", options=pilihan_opsi, index=def_idx, key=f"ocr_jns_{i}")
+                # Jika tanda (+), kunci otomatis Tarik Tunai dan tampilkan estimasi adminnya
+                if item['Tanda'] == '+':
+                    jns_pilih = "Tarik Tunai"
+                    st.markdown("<p style='color:#14B8A6; font-size:13px; margin:0;'>Jenis: <b>Tarik Tunai (Otomatis)</b></p>", unsafe_allow_html=True)
+                else:
+                    # Jika tanda (-), beri pilihan terbatas (Bank, E-Wallet, Tarik Tunai)
+                    pilihan_opsi_ocr = ["Bank", "E-Wallet", "Tarik Tunai"]
+                    def_idx_ocr = pilihan_opsi_ocr.index(item['Jenis Otomatis']) if item['Jenis Otomatis'] in pilihan_opsi_ocr else 0
+                    jns_pilih = st.selectbox(f"Pilih Jenis Trx #{i+1}", options=pilihan_opsi_ocr, index=def_idx_ocr, key=f"ocr_jns_{i}")
+                
+                # Hitung & Tampilkan Estimasi Biaya Admin (Cuan)
+                est_admin = hitung_admin(item['Nominal (Rp)'], jns_pilih)
+                st.markdown(f"<p style='color:#2ca02c; font-size:13px; margin-top:2px;'>💰 Estimasi Admin (Cuan): <b>{f_uang(est_admin)}</b></p>", unsafe_allow_html=True)
+                
                 updated_draf.append({
                     'Tanda': item['Tanda'],
                     'Jenis Otomatis': jns_pilih,
                     'Nominal (Rp)': item['Nominal (Rp)']
                 })
-                st.markdown("<hr style='margin:5px 0; border-color:#333;'>", unsafe_allow_html=True)
+                st.markdown("<hr style='margin:10px 0; border-color:#333;'>", unsafe_allow_html=True)
             
-            st.session_state['draf_scan_smart'] = updated_draf
+            # Hapus item jika tombol kecil ❌ diklik
+            if indices_to_delete:
+                st.session_state['draf_scan_smart'] = [item for idx, item in enumerate(st.session_state['draf_scan_smart']) if idx not in indices_to_delete]
+                st.rerun()
+            else:
+                st.session_state['draf_scan_smart'] = updated_draf
 
             if st.button("💾 SIMPAN SEMUA TRANSAKSI OCR", type="primary", use_container_width=True):
                 waktu = datetime.now(pytz.timezone('Asia/Jakarta')).strftime("%Y-%m-%d %H:%M:%S")
@@ -563,9 +599,8 @@ with tab3:
             fig_profit = px.bar(df_profit_harian, x='Tanggal', y='Profit_Val', template="plotly_dark", color_discrete_sequence=['#14B8A6'])
             st.plotly_chart(fig_profit, use_container_width=True)
 
-# --- TAB 4: STOK BARANG (DENGAN PILIHAN / TAMBAH KATEGORI DROPDOWN) ---
+# --- TAB 4: STOK BARANG ---
 with tab4:
-    # Ambil daftar kategori yang sudah ada di database untuk opsi dropdown
     existing_categories = ["Perdana", "Voucher", "Aksesoris", "Umum"]
     if ws_s:
         data_s_raw = ws_s.get_all_values()
@@ -578,7 +613,6 @@ with tab4:
         barcode_input = st.text_input("Nomor Barcode / Label:")
         nama_barang = st.text_input("Nama Barang:")
         
-        # Pilihan Kategori: Pilih yang ada atau Buat Baru
         opsi_kategori = existing_categories + ["+ Buat Kategori Baru..."]
         pilih_kat_tambah = st.selectbox("Pilih Kategori Barang:", options=opsi_kategori, key="sel_kat_tambah")
         
@@ -619,7 +653,6 @@ with tab4:
             df_s = pd.DataFrame(normalized_rows, columns=['Barcode', 'Nama_Barang', 'Stok', 'Harga_Modal', 'Harga_Jual', 'Kode_Cepat', 'Kategori'])
             df_s['No_Baris'] = range(2, len(df_s) + 2)
 
-            # Update list kategori dari data terbaru
             list_kategori_filter = ["Semua Kategori"] + sorted(df_s['Kategori'].dropna().unique().tolist())
             pilih_filter_kat = st.selectbox("Filter Berdasarkan Kategori:", options=list_kategori_filter)
             
@@ -669,7 +702,6 @@ with tab4:
                         es_jul = st.number_input("Harga Jual", value=int(row['Harga_Jual']) if str(row['Harga_Jual']).isdigit() else 0, step=1000)
                         es_kod = st.text_input("Kode Cepat", value=row['Kode_Cepat'])
                         
-                        # Dropdown Kategori untuk Edit
                         opsi_kat_edit = existing_categories + ["+ Buat Kategori Baru..."]
                         default_kat_idx = opsi_kat_edit.index(kat) if kat in opsi_kat_edit else 0
                         es_pilih_kat = st.selectbox("Kategori Barang", options=opsi_kat_edit, index=default_kat_idx)
