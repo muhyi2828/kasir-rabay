@@ -2,22 +2,41 @@ import streamlit as st
 from PIL import Image
 from google import genai
 import re
+import gspread
+import json
+from datetime import datetime
+import pytz
 
 st.set_page_config(page_title="Kasir RABAY CELL", page_icon="🚀", layout="centered")
 
-# Mengambil API Key dari Brankas Rahasia (Secrets) secara otomatis
+# Mengambil API Key dari Brankas
 try:
     api_key = st.secrets["GEMINI_API_KEY"]
 except:
     api_key = ""
-    st.error("API Key belum terpasang di Brankas Streamlit!")
+    st.warning("API Key Gemini belum disetting.")
 
-# Inisialisasi Memori Transaksi
+# Fungsi Menghubungkan ke Google Sheets
+@st.cache_resource
+def konek_gsheets():
+    try:
+        kredensial = json.loads(st.secrets["GOOGLE_JSON"])
+        gc = gspread.service_account_from_dict(kredensial)
+        sh = gc.open("Database Kasir")
+        return sh.get_worksheet(0) # Mengambil sheet pertama
+    except Exception as e:
+        return None
+
+# Menyalakan Koneksi Database
+worksheet = konek_gsheets()
+
+# Inisialisasi Memori Transaksi (Web)
 if 'riwayat' not in st.session_state:
     st.session_state['riwayat'] = []
 
 st.title("🚀 Kasir RABAY CELL")
-st.caption("Sistem POS & Pemindai Struk Otomatis")
+# Indikator Database Menyala/Mati
+st.caption("🟢 Terkoneksi ke Google Sheets" if worksheet else "🔴 Database Terputus (Cek Brankas JSON)")
 
 # Fungsi Hitung Admin
 def hitung_admin(nominal, jenis):
@@ -48,7 +67,6 @@ def hitung_admin(nominal, jenis):
 def baca_nominal_ocr(gambar, key):
     client = genai.Client(api_key=key)
     prompt = "Temukan nominal bersih transaksi (jumlah uang utama yang ditransfer/ditopup). HANYA balas dengan angkanya saja secara mentah tanpa spasi, tanpa 'Rp', tanpa titik/koma. Abaikan nomor referensi atau saldo."
-    # NAMA MODEL SUDAH DIPERBARUI DI SINI
     response = client.models.generate_content(model='gemini-3.6-flash', contents=[gambar, prompt])
     angka_bersih = re.sub(r'\D', '', response.text)
     return int(angka_bersih)
@@ -71,11 +89,7 @@ tab1, tab2 = st.tabs(["⚡ Input Kasir", "📊 Rekap Harian"])
 
 with tab1:
     st.subheader("Input Transaksi Baru")
-    
-    # 1. Fitur Quick Code
     quick_code = st.text_input("Kode Cepat (Contoh: TF100, EW50, TK200):")
-    
-    # 2. Fitur Kamera OCR
     sumber_gambar = st.file_uploader("Atau Foto/Upload Struk:", type=["jpg", "jpeg", "png"])
     
     nominal_transaksi = 0
@@ -96,32 +110,49 @@ with tab1:
                 except Exception as e:
                     st.error(f"Pesan Error Asli: {e}")
         else:
-            st.warning("API Key belum disetting di Brankas Streamlit.")
+            st.warning("API Key belum disetting.")
 
-    # 3. Kalkulator & Konfirmasi
+    # Kalkulator & Konfirmasi
     if nominal_transaksi > 0:
         st.markdown("---")
         jenis_transaksi = st.radio("Jenis Transaksi:", ["Bank", "E-Wallet", "Tarik Tunai"], index=["Bank", "E-Wallet", "Tarik Tunai"].index(jenis_transaksi), horizontal=True)
         nominal_akhir = st.number_input("Nominal Transaksi (Rp):", value=nominal_transaksi, step=10000)
         
         admin = hitung_admin(nominal_akhir, jenis_transaksi)
+        total_uang = nominal_akhir + admin if jenis_transaksi != "Tarik Tunai" else nominal_akhir - admin
         
         c1, c2 = st.columns(2)
         c1.metric("Nominal Uang", f"Rp {nominal_akhir:,}")
         c2.metric("Biaya Admin", f"Rp {admin:,}")
         
         if jenis_transaksi == "Tarik Tunai":
-            st.info(f"💵 Uang Tunai Diserahkan (Potong Admin): **Rp {nominal_akhir - admin:,}**")
+            st.info(f"💵 Uang Tunai Diserahkan (Potong Admin): **Rp {total_uang:,}**")
         else:
-            st.success(f"💰 Total Tagihan Pelanggan: **Rp {nominal_akhir + admin:,}**")
+            st.success(f"💰 Total Tagihan Pelanggan: **Rp {total_uang:,}**")
         
         if st.button("💾 Simpan Transaksi", type="primary", use_container_width=True):
+            # Ambil Waktu Indonesia Barat (WIB)
+            tz = pytz.timezone('Asia/Jakarta')
+            waktu_sekarang = datetime.now(tz).strftime("%Y-%m-%d %H:%M:%S")
+            
+            # 1. Simpan ke Google Sheets (Permanen)
+            if worksheet:
+                try:
+                    worksheet.append_row([waktu_sekarang, jenis_transaksi, nominal_akhir, admin, total_uang])
+                    st.success("✅ Transaksi berhasil disimpan permanen ke Google Sheets!")
+                except Exception as e:
+                    st.error(f"Gagal menyimpan ke database: {e}")
+            else:
+                st.warning("Database Google Sheets belum menyala. Hanya tersimpan di rekap web.")
+            
+            # 2. Simpan ke Layar Web (Sementara)
             st.session_state['riwayat'].append({
+                "Waktu": waktu_sekarang,
                 "Jenis": jenis_transaksi,
                 "Nominal": nominal_akhir,
-                "Admin": admin
+                "Admin": admin,
+                "Total Uang": total_uang
             })
-            st.success("Transaksi berhasil dicatat!")
 
 with tab2:
     st.subheader("Rekap Sementara Hari Ini")
@@ -130,7 +161,7 @@ with tab2:
         tot_admin = sum(x['Admin'] for x in st.session_state['riwayat'])
         st.metric("Total Keuntungan Admin", f"Rp {tot_admin:,}")
         
-        if st.button("🗑️ Hapus Rekap"):
+        if st.button("🗑️ Hapus Rekap Web"):
             st.session_state['riwayat'] = []
             st.rerun()
     else:
