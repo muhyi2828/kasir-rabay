@@ -222,7 +222,6 @@ with tab1:
                 st.success("Semua data berhasil disimpan & profit tercatat!")
                 st.rerun()
 
-# --- TAB 2: STOK BARANG & EDIT BERDASARKAN NAMA ---
 with tab2:
     st.subheader("📦 Manajemen Stok Barang & Barcode")
     
@@ -253,16 +252,12 @@ with tab2:
             df_s['No_Baris'] = range(2, len(df_s) + 2)
             st.dataframe(df_s, use_container_width=True)
             
-            # --- FITUR EDIT STOK BERDASARKAN NAMA BARANG ---
             st.markdown("---")
             st.subheader("✏️ Edit Data Stok Barang")
-            
-            # Ambil daftar nama barang untuk pilihan dropdown
             daftar_nama_barang = df_s['Nama_Barang'].tolist()
             pilih_nama_edit = st.selectbox("Pilih Nama Barang yang mau di-edit:", options=["-- Pilih Barang --"] + daftar_nama_barang)
             
             if pilih_nama_edit != "-- Pilih Barang --":
-                # Cari nomor baris berdasarkan nama barang yang dipilih
                 match_row = df_s[df_s['Nama_Barang'] == pilih_nama_edit]
                 if not match_row.empty:
                     pilih_baris_edit = int(match_row.iloc[0]['No_Baris'])
@@ -295,22 +290,56 @@ with tab2:
         else:
             st.info("Belum ada data stok.")
 
+# --- TAB 3: RIWAYAT TRANSAKSI DENGAN FILTER JENIS & TANGGAL ---
 with tab3:
-    st.subheader("📋 Kelola Riwayat Transaksi")
+    st.subheader("📋 Kelola & Filter Riwayat Transaksi")
     if ws_t:
         data_t = ws_t.get_all_values()
         if len(data_t) > 1:
             df_t = pd.DataFrame(data_t[1:], columns=data_t[0])
             df_t['No_Baris'] = range(2, len(df_t) + 2)
-            st.dataframe(df_t, use_container_width=True)
             
-            baris_hapus_trx = st.multiselect("Pilih Nomor Baris Transaksi:", options=df_t['No_Baris'].tolist(), key="del_trx")
+            # Ubah kolom waktu menjadi format tanggal untuk keperluan filter
+            df_t['Tanggal_Saja'] = pd.to_datetime(df_t['Waktu'], errors='coerce').dt.date
+            
+            # --- FITUR FILTER ---
+            st.write("### 🔍 Filter Tampilan")
+            col_f1, col_f2 = st.columns(2)
+            
+            with col_f1:
+                # Filter Berdasarkan Jenis Transaksi
+                jenis_tersedia = ["Semua"] + df_t['Jenis'].unique().tolist()
+                pilih_filter_jenis = st.selectbox("Filter Jenis Transaksi:", options=jenis_tersedia)
+                
+            with col_f2:
+                # Filter Berdasarkan Tanggal
+                tanggal_tersedia = sorted(df_t['Tanggal_Saja'].dropna().unique(), reverse=True)
+                pilih_filter_tgl = st.selectbox("Filter Tanggal:", options=["Semua Tanggal"] + [str(t) for t in tanggal_tersedia])
+            
+            # Terapkan Filter ke Dataframe
+            df_t_filtered = df_t.copy()
+            if pilih_filter_jenis != "Semua":
+                df_t_filtered = df_t_filtered[df_t_filtered['Jenis'] == pilih_filter_jenis]
+            if pilih_filter_tgl != "Semua Tanggal":
+                df_t_filtered = df_t_filtered[df_t_filtered['Tanggal_Saja'].astype(str) == pilih_filter_tgl]
+                
+            # Sembunyikan kolom bantu 'Tanggal_Saja' sebelum ditampilkan ke tabel
+            df_t_display = df_t_filtered.drop(columns=['Tanggal_Saja'])
+            
+            st.markdown("---")
+            st.dataframe(df_t_display, use_container_width=True)
+            
+            st.markdown("---")
+            st.write("### 🗑️ Hapus Transaksi Terpilih")
+            baris_hapus_trx = st.multiselect("Pilih Nomor Baris Transaksi yang akan dihapus:", options=df_t_filtered['No_Baris'].tolist(), key="del_trx")
             if st.button("❌ Hapus Transaksi Terpilih", type="primary"):
                 if baris_hapus_trx:
                     for baris in sorted(baris_hapus_trx, reverse=True):
                         ws_t.delete_rows(int(baris))
                     st.success("Transaksi terpilih berhasil dihapus!")
                     st.rerun()
+                else:
+                    st.warning("Pilih minimal 1 baris transaksi.")
         else:
             st.info("Belum ada riwayat transaksi.")
 
