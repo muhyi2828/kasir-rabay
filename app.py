@@ -172,3 +172,5 @@ with tab2:
             st.rerun()
     else:
         st.info("Belum ada transaksi tersimpan.")
+        
+# RESET MEMORI ERROR 1
