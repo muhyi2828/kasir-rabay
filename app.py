@@ -116,8 +116,7 @@ with tab1:
     if metode == "Ketik Manual / Kode Cepat / Barang":
         quick = st.text_input("🔍 Masukkan Kode Cepat (TF100, EW50, TK200) atau Kode/Barcode Stok:")
         
-        # Variabel penampung hasil deteksi barang/transaksi tunggal
-        nama_brg_ det = ""
+        nama_brg_det = ""
         row_brg_det = None
         profit_brg_det = 0
         jenis_trx_manual = "Bank"
@@ -139,7 +138,7 @@ with tab1:
                         row_idx = int(match_barang.iloc[0]['Row_Idx'])
                         
                         profit_item = hargajual - hargamodal
-                        nama_brg_ det = namabarang
+                        nama_brg_det = namabarang
                         row_brg_det = row_idx
                         profit_brg_det = profit_item
                         jenis_trx_manual = "Penjualan Barang"
@@ -191,7 +190,6 @@ with tab1:
                 else:
                     st.success(f"💰 Total Tagihan Pelanggan: **Rp {total_uang:,}**")
             
-            # --- TOMBOL AKSI: SIMPAN LANGSUNG ATAU MASUKKAN KE KERANJANG ---
             col_b1, col_b2 = st.columns(2)
             
             with col_b1:
@@ -304,7 +302,6 @@ with tab1:
             except Exception as e:
                 st.error(f"Gagal scan: {e}")
 
-        # --- PREVIEW HASIL SCAN CERDAS (+ / -) ---
         if st.session_state['draf_scan_smart']:
             st.markdown("---")
             jumlah_draf = len(st.session_state['draf_scan_smart'])
