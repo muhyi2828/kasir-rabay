@@ -93,8 +93,7 @@ with tab1:
                         nominal_transaksi = baca_nominal_ocr(gambar, api_key)
                         st.success(f"Berhasil! Nominal terbaca: Rp {nominal_transaksi:,}")
                 except Exception as e:
-    st.error(f"Pesan Error Asli: {e}")
-
+                    st.error(f"Pesan Error Asli: {e}")
         else:
             st.warning("API Key belum disetting di Brankas Streamlit.")
 
