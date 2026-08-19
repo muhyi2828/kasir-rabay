@@ -288,7 +288,7 @@ with tab4:
     
     st.markdown("---")
     
-    # Hitung Keuntungan Hari Ini Secara Aman
+    # Hitung Keuntungan Hari Ini dengan Penanganan Kolom Aman
     profit_hari_ini = 0
     if ws_t:
         data_t = ws_t.get_all_values()
@@ -299,9 +299,11 @@ with tab4:
                 tgl_hari_ini = datetime.now(pytz.timezone('Asia/Jakarta')).strftime('%Y-%m-%d')
                 
                 df_hari_ini = df_trx[df_trx['Tanggal'] == tgl_hari_ini].copy()
-                if not df_hari_ini.empty and 'Profit' in df_hari_ini.columns:
-                    df_hari_ini['Profit'] = pd.to_numeric(df_hari_ini['Profit'], errors='coerce').fillna(0)
-                    profit_hari_ini = df_hari_ini['Profit'].sum()
+                if not df_hari_ini.empty:
+                    # Cek apakah kolom 'Profit' ada di dataframe, jika tidak buat dengan nilai 0
+                    if 'Profit' in df_hari_ini.columns:
+                        df_hari_ini['Profit'] = pd.to_numeric(df_hari_ini['Profit'], errors='coerce').fillna(0)
+                        profit_hari_ini = df_hari_ini['Profit'].sum()
 
     st.metric("🔥 Total Keuntungan (Profit) Hari Ini", f"Rp {profit_hari_ini:,}")
     
@@ -316,9 +318,12 @@ with tab4:
         data_t = ws_t.get_all_values()
         if len(data_t) > 1:
             df_trx_all = pd.DataFrame(data_t[1:], columns=data_t[0])
-            if 'Waktu' in df_trx_all.columns and 'Profit' in df_trx_all.columns:
+            if 'Waktu' in df_trx_all.columns:
                 df_trx_all['Tanggal'] = pd.to_datetime(df_trx_all['Waktu'], errors='coerce').dt.strftime('%Y-%m-%d')
-                df_trx_all['Profit'] = pd.to_numeric(df_trx_all['Profit'], errors='coerce').fillna(0)
+                if 'Profit' in df_trx_all.columns:
+                    df_trx_all['Profit'] = pd.to_numeric(df_trx_all['Profit'], errors='coerce').fillna(0)
+                else:
+                    df_trx_all['Profit'] = 0
                 
                 df_profit_harian = df_trx_all.groupby('Tanggal')['Profit'].sum().reset_index()
                 
