@@ -5,17 +5,19 @@ import re
 
 st.set_page_config(page_title="Kasir RABAY CELL", page_icon="🚀", layout="centered")
 
+# Mengambil API Key dari Brankas Rahasia (Secrets) secara otomatis
+try:
+    api_key = st.secrets["GEMINI_API_KEY"]
+except:
+    api_key = ""
+    st.error("API Key belum terpasang di Brankas Streamlit!")
+
 # Inisialisasi Memori Transaksi
 if 'riwayat' not in st.session_state:
     st.session_state['riwayat'] = []
 
 st.title("🚀 Kasir RABAY CELL")
 st.caption("Sistem POS & Pemindai Struk Otomatis")
-
-# Sidebar untuk API Key
-st.sidebar.header("🔑 Pengaturan Sistem")
-api_key = st.sidebar.text_input("Masukkan API Key Gemini:", type="password")
-st.sidebar.info("API Key aman dan tidak disimpan permanen di publik.")
 
 # Fungsi Hitung Admin
 def hitung_admin(nominal, jenis):
@@ -91,9 +93,9 @@ with tab1:
                         nominal_transaksi = baca_nominal_ocr(gambar, api_key)
                         st.success(f"Berhasil! Nominal terbaca: Rp {nominal_transaksi:,}")
                 except Exception as e:
-                    st.error("Gagal membaca gambar. Pastikan API Key benar.")
+                    st.error("Gagal membaca gambar atau jaringan tidak stabil.")
         else:
-            st.warning("Masukkan API Key di menu samping (>) dulu untuk scan struk.")
+            st.warning("API Key belum disetting di Brankas Streamlit.")
 
     # 3. Kalkulator & Konfirmasi
     if nominal_transaksi > 0:
