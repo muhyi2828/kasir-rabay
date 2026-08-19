@@ -222,25 +222,27 @@ with tab1:
                 st.success("Semua data berhasil disimpan & profit tercatat!")
                 st.rerun()
 
+# --- TAB 2: STOK BARANG & EDIT STOK ---
 with tab2:
     st.subheader("📦 Manajemen Stok Barang & Barcode")
-    with st.form("form_tambah_stok", clear_on_submit=True):
-        st.write("### Tambah / Input Barang Baru")
-        barcode_input = st.text_input("Nomor Barcode / Label:")
-        nama_barang = st.text_input("Nama Barang:")
-        stok_awal = st.number_input("Jumlah Stok:", min_value=1, step=1)
-        harga_modal = st.number_input("Harga Modal (Rp):", min_value=0, step=1000)
-        harga_jual = st.number_input("Harga Jual (Rp):", min_value=0, step=1000)
-        kode_cepat_brg = st.text_input("Kode Cepat Barang (Contoh: SPI, VCG1):")
-        
-        submit_stok = st.form_submit_button("💾 Simpan Barang ke Database Stok")
-        if submit_stok:
-            if ws_s and nama_barang:
-                ws_s.append_row([barcode_input, nama_barang, stok_awal, harga_modal, harga_jual, kode_cepat_brg])
-                st.success(f"Barang **{nama_barang}** berhasil ditambahkan!")
-                st.rerun()
-            else:
-                st.warning("Nama barang wajib diisi!")
+    
+    with st.expander("➕ Tambah Barang Baru"):
+        with st.form("form_tambah_stok", clear_on_submit=True):
+            barcode_input = st.text_input("Nomor Barcode / Label:")
+            nama_barang = st.text_input("Nama Barang:")
+            stok_awal = st.number_input("Jumlah Stok:", min_value=1, step=1)
+            harga_modal = st.number_input("Harga Modal (Rp):", min_value=0, step=1000)
+            harga_jual = st.number_input("Harga Jual (Rp):", min_value=0, step=1000)
+            kode_cepat_brg = st.text_input("Kode Cepat Barang (Contoh: SPI, VCG1):")
+            
+            submit_stok = st.form_submit_button("💾 Simpan Barang Baru")
+            if submit_stok:
+                if ws_s and nama_barang:
+                    ws_s.append_row([barcode_input, nama_barang, stok_awal, harga_modal, harga_jual, kode_cepat_brg])
+                    st.success(f"Barang **{nama_barang}** berhasil ditambahkan!")
+                    st.rerun()
+                else:
+                    st.warning("Nama barang wajib diisi!")
 
     st.markdown("---")
     st.subheader("📋 Daftar Stok Tersedia")
@@ -251,6 +253,32 @@ with tab2:
             df_s['No_Baris'] = range(2, len(df_s) + 2)
             st.dataframe(df_s, use_container_width=True)
             
+            # --- FITUR EDIT STOK BARANG ---
+            st.markdown("---")
+            st.subheader("✏️ Edit Data Stok Barang")
+            pilih_baris_edit = st.selectbox("Pilih Nomor Baris Barang yang mau di-edit:", options=[0] + df_s['No_Baris'].tolist())
+            
+            if pilih_baris_edit > 0:
+                # Ambil data lama dari baris tersebut di Google Sheets
+                row_data = ws_s.row_values(pilih_baris_edit)
+                # Pastikan panjang row_data aman
+                while len(row_data) < 6: row_data.append("")
+                
+                with st.form("form_edit_stok"):
+                    edit_barcode = st.text_input("Barcode / Label:", value=row_data[0])
+                    edit_nama = st.text_input("Nama Barang:", value=row_data[1])
+                    edit_stok = st.number_input("Jumlah Stok:", value=int(row_data[2]) if row_data[2].isdigit() else 0, step=1)
+                    edit_modal = st.number_input("Harga Modal (Rp):", value=int(row_data[3]) if row_data[3].isdigit() else 0, step=1000)
+                    edit_jual = st.number_input("Harga Jual (Rp):", value=int(row_data[4]) if row_data[4].isdigit() else 0, step=1000)
+                    edit_kode = st.text_input("Kode Cepat Barang:", value=row_data[5])
+                    
+                    btn_update = st.form_submit_button("🔄 Update Perubahan Stok", type="primary")
+                    if btn_update:
+                        ws_s.update(f"A{pilih_baris_edit}:F{pilih_baris_edit}", [[edit_barcode, edit_nama, edit_stok, edit_modal, edit_jual, edit_kode]])
+                        st.success(f"Data barang baris ke-{pilih_baris_edit} berhasil diperbarui!")
+                        st.rerun()
+
+            st.markdown("---")
             baris_hapus_stok = st.multiselect("Pilih Baris Stok yang ingin dihapus:", options=df_s['No_Baris'].tolist(), key="del_stok")
             if st.button("❌ Hapus Stok Terpilih", type="primary"):
                 if baris_hapus_stok:
@@ -288,20 +316,17 @@ with tab4:
     
     st.markdown("---")
     
-    # HITUNG KEUNTUNGAN HARI INI BERDASARKAN KOLOM TERAKHIR (SUPER AMAN)
     profit_hari_ini = 0
     if ws_t:
         data_t = ws_t.get_all_values()
         if len(data_t) > 1:
             df_trx = pd.DataFrame(data_t[1:])
-            # Ambil kolom ke-0 (Waktu) dan kolom terakhir (Profit)
             if len(df_trx.columns) >= 6:
                 df_trx['Tanggal'] = pd.to_datetime(df_trx.iloc[:, 0], errors='coerce').dt.strftime('%Y-%m-%d')
                 tgl_hari_ini = datetime.now(pytz.timezone('Asia/Jakarta')).strftime('%Y-%m-%d')
                 
                 df_hari_ini = df_trx[df_trx['Tanggal'] == tgl_hari_ini].copy()
                 if not df_hari_ini.empty:
-                    # Ambil angka dari kolom ke-5 (kolom ke-6 di sheets yaitu Profit)
                     df_hari_ini['Profit_Val'] = pd.to_numeric(df_hari_ini.iloc[:, 5], errors='coerce').fillna(0)
                     profit_hari_ini = df_hari_ini['Profit_Val'].sum()
 
