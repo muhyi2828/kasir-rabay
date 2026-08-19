@@ -3,3 +3,5 @@ google-genai
 pillow
 gspread
 pytz
+pandas
+plotly
