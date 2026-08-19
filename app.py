@@ -62,7 +62,7 @@ if 'modal_cash' not in st.session_state: st.session_state['modal_cash'] = 0
 if 'modal_digi' not in st.session_state: st.session_state['modal_digi'] = 0
 if 'input_nominal' not in st.session_state: st.session_state['input_nominal'] = 0
 if 'input_jenis' not in st.session_state: st.session_state['input_jenis'] = "Bank"
-if 'draf_scan' not in st.session_state: st.session_state['draf_scan'] = []
+if 'draf_scan_smart' not in st.session_state: st.session_state['draf_scan_smart'] = []
 if 'nama_barang_ditemukan' not in st.session_state: st.session_state['nama_barang_ditemukan'] = ""
 if 'baris_stok_ditemukan' not in st.session_state: st.session_state['baris_stok_ditemukan'] = None
 if 'profit_barang_ini' not in st.session_state: st.session_state['profit_barang_ini'] = 0
@@ -218,50 +218,65 @@ with tab1:
 
     else: 
         sumber_gambar = st.file_uploader("Upload Screenshot Mutasi:", type=["jpg", "jpeg", "png"])
-        if sumber_gambar and st.button("🔍 Pindai Gambar dengan AI", use_container_width=True):
+        if sumber_gambar and st.button("🔍 Pindai Cerdas (+/-) dengan AI", use_container_width=True):
             try:
-                with st.spinner("AI sedang membaca semua angka..."):
+                with st.spinner("AI sedang membaca nominal & mendeteksi tanda +/-..."):
                     client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
                     img = Image.open(sumber_gambar)
-                    res = client.models.generate_content(model='gemini-3.6-flash', contents=[img, "Tulis semua nominal transaksi, balas dengan format angka dipisah koma: 5000000,9000000"])
-                    nums = [int(x) for x in re.sub(r'[^0-9,]', '', res.text).split(',') if x.isdigit()]
-                    st.session_state['draf_scan'] = nums
+                    res = client.models.generate_content(
+                        model='gemini-3.6-flash', 
+                        contents=[img, "Tulis semua nominal transaksi beserta tandanya (+ atau -). Balas dengan format angka dipisah koma, contoh: +9067000,-75000,-5000000"]
+                    )
+                    
+                    raw_text = res.text.replace(" ", "")
+                    items = raw_text.split(',')
+                    processed_data = []
+                    for item in items:
+                        if '+' in item or '-' in item:
+                            nom_val = int(re.sub(r'[^0-9]', '', item))
+                            # Tanda + otomatis jadi Tarik Tunai, - otomatis jadi Bank
+                            kategori = 'Tarik Tunai' if '+' in item else 'Bank'
+                            tanda_simbol = '+' if '+' in item else '-'
+                            processed_data.append({
+                                'Tanda': tanda_simbol,
+                                'Jenis Otomatis': kategori,
+                                'Nominal (Rp)': nom_val
+                            })
+                    
+                    st.session_state['draf_scan_smart'] = processed_data
             except Exception as e:
                 st.error(f"Gagal scan: {e}")
 
-        # --- PREVIEW HASIL SCAN DIPERBAIKI (MENAMPILKAN TABEL/DAFTAR NOMINAL) ---
-        if st.session_state['draf_scan']:
+        # --- PREVIEW HASIL SCAN CERDAS (+ / -) ---
+        if st.session_state['draf_scan_smart']:
             st.markdown("---")
-            jumlah_draf = len(st.session_state['draf_scan'])
-            st.info(f"✨ Ditemukan {jumlah_draf} nominal transaksi dari gambar:")
+            jumlah_draf = len(st.session_state['draf_scan_smart'])
+            st.info(f"✨ Berhasil mendeteksi {jumlah_draf} transaksi dari gambar:")
             
-            # Menampilkan daftar nominal dalam bentuk tabel preview
-            df_preview = pd.DataFrame({
-                "No": range(1, jumlah_draf + 1),
-                "Nominal Terdeteksi (Rp)": [f"Rp {n:,}" for n in st.session_state['draf_scan']]
-            })
+            df_preview = pd.DataFrame(st.session_state['draf_scan_smart'])
             st.dataframe(df_preview, use_container_width=True, hide_index=True)
             
-            jenis_massal = st.radio("Jenis untuk semua data di atas:", ["Bank", "E-Wallet", "Tarik Tunai"], horizontal=True)
-            
-            if st.button("💾 Simpan Semua ke Database & Kas", type="primary", use_container_width=True):
+            if st.button("💾 Simpan Semua ke Database & Perbarui Kas", type="primary", use_container_width=True):
                 waktu = datetime.now(pytz.timezone('Asia/Jakarta')).strftime("%Y-%m-%d %H:%M:%S")
-                for nom in st.session_state['draf_scan']:
-                    admin = hitung_admin(nom, jenis_massal)
-                    total = nom + admin if jenis_massal != "Tarik Tunai" else nom - admin
-                    profit_scan = admin
+                for item in st.session_state['draf_scan_smart']:
+                    nom = item['Nominal (Rp)']
+                    jenis = item['Jenis Otomatis']
+                    admin = hitung_admin(nom, jenis)
                     
-                    if jenis_massal == "Tarik Tunai":
+                    if jenis == "Tarik Tunai":
+                        total = nom - admin
                         st.session_state['modal_cash'] -= total
                         st.session_state['modal_digi'] += nom
                     else:
+                        total = nom + admin
                         st.session_state['modal_digi'] -= nom
                         st.session_state['modal_cash'] += total
                         
-                    if ws_t: ws_t.append_row([waktu, jenis_massal, nom, admin, total, profit_scan])
+                    profit_scan = admin
+                    if ws_t: ws_t.append_row([waktu, jenis, nom, admin, total, profit_scan])
                 
-                st.session_state['draf_scan'] = []
-                st.success("Semua data berhasil disimpan & profit tercatat!")
+                st.session_state['draf_scan_smart'] = []
+                st.success("Semua data berhasil disimpan sesuai kategori (+/-) & profit tercatat!")
                 st.rerun()
 
 # --- TAB 2: RIWAYAT ---
