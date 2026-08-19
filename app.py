@@ -288,22 +288,22 @@ with tab4:
     
     st.markdown("---")
     
-    # Hitung Keuntungan Hari Ini dengan Penanganan Kolom Aman
+    # HITUNG KEUNTUNGAN HARI INI BERDASARKAN KOLOM TERAKHIR (SUPER AMAN)
     profit_hari_ini = 0
     if ws_t:
         data_t = ws_t.get_all_values()
         if len(data_t) > 1:
-            df_trx = pd.DataFrame(data_t[1:], columns=data_t[0])
-            if 'Waktu' in df_trx.columns:
-                df_trx['Tanggal'] = pd.to_datetime(df_trx['Waktu'], errors='coerce').dt.strftime('%Y-%m-%d')
+            df_trx = pd.DataFrame(data_t[1:])
+            # Ambil kolom ke-0 (Waktu) dan kolom terakhir (Profit)
+            if len(df_trx.columns) >= 6:
+                df_trx['Tanggal'] = pd.to_datetime(df_trx.iloc[:, 0], errors='coerce').dt.strftime('%Y-%m-%d')
                 tgl_hari_ini = datetime.now(pytz.timezone('Asia/Jakarta')).strftime('%Y-%m-%d')
                 
                 df_hari_ini = df_trx[df_trx['Tanggal'] == tgl_hari_ini].copy()
                 if not df_hari_ini.empty:
-                    # Cek apakah kolom 'Profit' ada di dataframe, jika tidak buat dengan nilai 0
-                    if 'Profit' in df_hari_ini.columns:
-                        df_hari_ini['Profit'] = pd.to_numeric(df_hari_ini['Profit'], errors='coerce').fillna(0)
-                        profit_hari_ini = df_hari_ini['Profit'].sum()
+                    # Ambil angka dari kolom ke-5 (kolom ke-6 di sheets yaitu Profit)
+                    df_hari_ini['Profit_Val'] = pd.to_numeric(df_hari_ini.iloc[:, 5], errors='coerce').fillna(0)
+                    profit_hari_ini = df_hari_ini['Profit_Val'].sum()
 
     st.metric("🔥 Total Keuntungan (Profit) Hari Ini", f"Rp {profit_hari_ini:,}")
     
@@ -317,18 +317,15 @@ with tab4:
     if ws_t:
         data_t = ws_t.get_all_values()
         if len(data_t) > 1:
-            df_trx_all = pd.DataFrame(data_t[1:], columns=data_t[0])
-            if 'Waktu' in df_trx_all.columns:
-                df_trx_all['Tanggal'] = pd.to_datetime(df_trx_all['Waktu'], errors='coerce').dt.strftime('%Y-%m-%d')
-                if 'Profit' in df_trx_all.columns:
-                    df_trx_all['Profit'] = pd.to_numeric(df_trx_all['Profit'], errors='coerce').fillna(0)
-                else:
-                    df_trx_all['Profit'] = 0
+            df_trx_all = pd.DataFrame(data_t[1:])
+            if len(df_trx_all.columns) >= 6:
+                df_trx_all['Tanggal'] = pd.to_datetime(df_trx_all.iloc[:, 0], errors='coerce').dt.strftime('%Y-%m-%d')
+                df_trx_all['Profit_Val'] = pd.to_numeric(df_trx_all.iloc[:, 5], errors='coerce').fillna(0)
                 
-                df_profit_harian = df_trx_all.groupby('Tanggal')['Profit'].sum().reset_index()
+                df_profit_harian = df_trx_all.groupby('Tanggal')['Profit_Val'].sum().reset_index()
                 
-                fig_profit = px.bar(df_profit_harian, x='Tanggal', y='Profit', 
-                                    labels={'Profit': 'Keuntungan (Rp)', 'Tanggal': 'Tanggal'},
+                fig_profit = px.bar(df_profit_harian, x='Tanggal', y='Profit_Val', 
+                                    labels={'Profit_Val': 'Keuntungan (Rp)', 'Tanggal': 'Tanggal'},
                                     title="Grafik Keuntungan (Profit) Harian Toko")
                 st.plotly_chart(fig_profit, use_container_width=True)
         else:
