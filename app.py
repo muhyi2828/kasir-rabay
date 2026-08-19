@@ -96,7 +96,7 @@ def konek_gsheets():
         except: ws_k = sh.add_worksheet(title="Kas_Harian", rows=1000, cols=5)
 
         try: ws_s = sh.worksheet("Stok")
-        except: ws_s = sh.add_worksheet(title="Stok", rows=1000, cols=7) # Diperluas untuk kolom Kategori (7 kolom)
+        except: ws_s = sh.add_worksheet(title="Stok", rows=1000, cols=7)
             
         return sh, ws_t, ws_k, ws_s
     except: return None, None, None, None
@@ -199,14 +199,14 @@ with tab1:
             if ws_s:
                 stok_data = ws_s.get_all_values()
                 if len(stok_data) > 1:
-                    df_s_check = pd.DataFrame(stok_data[1:], columns=stok_data[0][:6])
+                    df_s_check = pd.DataFrame(stok_data[1:])
                     df_s_check['Row_Idx'] = range(2, len(df_s_check) + 2)
                     
-                    match_barang = df_s_check[(df_s_check['Kode_Cepat'].str.upper() == code) | (df_s_check['Barcode'].str.upper() == code)]
+                    match_barang = df_s_check[(df_s_check[5].str.upper() == code) | (df_s_check[0].str.upper() == code)]
                     if not match_barang.empty:
-                        namabarang = match_barang.iloc[0]['Nama_Barang']
-                        hargamodal = int(match_barang.iloc[0]['Harga_Modal'])
-                        hargajual = int(match_barang.iloc[0]['Harga_Jual'])
+                        namabarang = match_barang.iloc[0][1]
+                        hargamodal = int(match_barang.iloc[0][3])
+                        hargajual = int(match_barang.iloc[0][4])
                         
                         profit_item = hargajual - hargamodal
                         nama_brg_det = namabarang
@@ -331,7 +331,6 @@ with tab1:
                     for item in items:
                         if '+' in item or '-' in item:
                             nom_val = int(re.sub(r'[^0-9]', '', item))
-                            # Default: (+) jadi Tarik Tunai, (-) jadi Bank
                             kategori = 'Tarik Tunai' if '+' in item else 'Bank'
                             tanda_simbol = '+' if '+' in item else '-'
                             processed_data.append({'Tanda': tanda_simbol, 'Jenis Otomatis': kategori, 'Nominal (Rp)': nom_val})
@@ -342,7 +341,6 @@ with tab1:
             st.markdown("---")
             st.info(f"✨ Berhasil mendeteksi {len(st.session_state['draf_scan_smart'])} transaksi. Silakan atur jenis transaksinya di bawah sebelum disimpan:")
             
-            # FITUR UBAH JENIS TRANSAKSI SATU PERSATU UNTUK HASIL OCR
             updated_draf = []
             for i, item in enumerate(st.session_state['draf_scan_smart']):
                 st.markdown(f"**Transaksi #{i+1} ({item['Tanda']})** - Nominal: {f_uang(item['Nominal (Rp)'])}")
@@ -565,7 +563,7 @@ with tab3:
             fig_profit = px.bar(df_profit_harian, x='Tanggal', y='Profit_Val', template="plotly_dark", color_discrete_sequence=['#14B8A6'])
             st.plotly_chart(fig_profit, use_container_width=True)
 
-# --- TAB 4: STOK BARANG (DENGAN KATEGORI & FILTER KATEGORI) ---
+# --- TAB 4: STOK BARANG (DENGAN PEMBACAAN KOLOM KATEGORI OTOMATIS) ---
 with tab4:
     with st.expander("➕ Tambah Barang Baru"):
         barcode_input = st.text_input("Nomor Barcode / Label:")
@@ -583,7 +581,6 @@ with tab4:
         
         if st.button("💾 Simpan Barang", type="primary", use_container_width=True):
             if ws_s and nama_barang:
-                # Kolom: Barcode, Nama_Barang, Stok, Harga_Modal, Harga_Jual, Kode_Cepat, Kategori
                 ws_s.append_row([barcode_input, nama_barang, stok_awal, harga_modal, harga_jual, kode_cepat_brg, kategori_barang])
                 st.success("Tersimpan!")
                 st.rerun()
@@ -593,15 +590,21 @@ with tab4:
     if ws_s:
         data_s = ws_s.get_all_values()
         if len(data_s) > 1:
-            df_s = pd.DataFrame(data_s[1:], columns=data_s[0][:7]) # Ambil sampai 7 kolom
-            df_s['No_Baris'] = range(2, len(df_s) + 2)
+            header_stok = data_s[0]
+            rows_stok = data_s[1:]
             
-            # Jika kolom kategori belum ada di data lama, beri nilai default 'Umum'
-            if 'Kategori' not in df_s.columns:
-                df_s['Kategori'] = 'Umum'
+            # Pastikan setiap baris memiliki 7 kolom (jika data lama kurang, tambahkan 'Umum')
+            normalized_rows = []
+            for r in rows_stok:
+                while len(r) < 7:
+                    r.append("Umum")
+                normalized_rows.append(r)
+                
+            df_s = pd.DataFrame(normalized_rows, columns=['Barcode', 'Nama_Barang', 'Stok', 'Harga_Modal', 'Harga_Jual', 'Kode_Cepat', 'Kategori'])
+            df_s['No_Baris'] = range(2, len(df_s) + 2)
 
             # FILTER BERDASARKAN KATEGORI BARANG
-            list_kategori = ["Semua Kategori"] + df_s['Kategori'].dropna().unique().tolist()
+            list_kategori = ["Semua Kategori"] + sorted(df_s['Kategori'].dropna().unique().tolist())
             pilih_filter_kat = st.selectbox("Filter Berdasarkan Kategori:", options=list_kategori)
             
             df_s_filtered = df_s.copy()
@@ -611,12 +614,12 @@ with tab4:
             st.markdown("---")
             for index, row in df_s_filtered.iterrows():
                 b_stok = int(row['No_Baris'])
-                bc = row.iloc[0]
-                nm = row.iloc[1]
-                stk = row.iloc[2]
-                h_modal = f_uang(row.iloc[3]) if str(row.iloc[3]).isdigit() else row.iloc[3]
-                h_jual = f_uang(row.iloc[4]) if str(row.iloc[4]).isdigit() else row.iloc[4]
-                kat = row.iloc[6] if len(row) > 6 and row.iloc[6] else "Umum"
+                bc = row['Barcode']
+                nm = row['Nama_Barang']
+                stk = row['Stok']
+                h_modal = f_uang(row['Harga_Modal']) if str(row['Harga_Modal']).isdigit() else row['Harga_Modal']
+                h_jual = f_uang(row['Harga_Jual']) if str(row['Harga_Jual']).isdigit() else row['Harga_Jual']
+                kat = row['Kategori'] if row['Kategori'] else "Umum"
                 
                 st.markdown(f"**{nm}** | <span style='color:#14B8A6;'>[{kat}]</span> (Stok: {stk})<br>Modal: {h_modal} | Jual: {h_jual}<br>Barcode: {bc}", unsafe_allow_html=True)
                 
@@ -643,12 +646,12 @@ with tab4:
                 if st.session_state.get(f"mode_edit_stk_{b_stok}", False):
                     with st.form(key=f"form_edit_stok_{b_stok}"):
                         st.write(f"Edit Data: {nm}")
-                        es_bc = st.text_input("Barcode", value=row.iloc[0])
-                        es_nm = st.text_input("Nama Barang", value=row.iloc[1])
-                        es_stk = st.number_input("Stok", value=int(row.iloc[2]) if str(row.iloc[2]).isdigit() else 0, step=1)
-                        es_mod = st.number_input("Harga Modal", value=int(row.iloc[3]) if str(row.iloc[3]).isdigit() else 0, step=1000)
-                        es_jul = st.number_input("Harga Jual", value=int(row.iloc[4]) if str(row.iloc[4]).isdigit() else 0, step=1000)
-                        es_kod = st.text_input("Kode Cepat", value=row.iloc[5])
+                        es_bc = st.text_input("Barcode", value=bc)
+                        es_nm = st.text_input("Nama Barang", value=nm)
+                        es_stk = st.number_input("Stok", value=int(stk) if str(stk).isdigit() else 0, step=1)
+                        es_mod = st.number_input("Harga Modal", value=int(row['Harga_Modal']) if str(row['Harga_Modal']).isdigit() else 0, step=1000)
+                        es_jul = st.number_input("Harga Jual", value=int(row['Harga_Jual']) if str(row['Harga_Jual']).isdigit() else 0, step=1000)
+                        es_kod = st.text_input("Kode Cepat", value=row['Kode_Cepat'])
                         es_kat = st.text_input("Kategori", value=kat)
                         
                         if st.form_submit_button("Simpan Perubahan Stok"):
