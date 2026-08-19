@@ -126,7 +126,8 @@ with tab1:
 
         if st.session_state['draf_scan']:
             st.markdown("---")
-            st.info(f"Ditemukan {len(st.session_state['draf_scan']} nominal transaksi.")
+            jumlah_draf = len(st.session_state['draf_scan'])
+            st.info(f"Ditemukan {jumlah_draf} nominal transaksi.")
             jenis_massal = st.radio("Jenis untuk semua data di atas:", ["Bank", "E-Wallet"], horizontal=True)
             
             if st.button("💾 Simpan Semua ke Database & Kas", type="primary", use_container_width=True):
