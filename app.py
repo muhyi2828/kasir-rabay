@@ -16,27 +16,33 @@ except:
     api_key = ""
     st.warning("API Key Gemini belum disetting.")
 
-# Fungsi Menghubungkan ke Google Sheets
+# Fungsi Menghubungkan ke Google Sheets dengan Pelacak Error
 @st.cache_resource
 def konek_gsheets():
     try:
-        kredensial = json.loads(st.secrets["GOOGLE_JSON"])
+        # Memastikan spasi/enter yang tidak sengaja terbawa bisa diabaikan
+        json_string = st.secrets["GOOGLE_JSON"].strip()
+        kredensial = json.loads(json_string)
         gc = gspread.service_account_from_dict(kredensial)
         sh = gc.open("Database Kasir")
-        return sh.get_worksheet(0) # Mengambil sheet pertama
+        return sh.get_worksheet(0), "Aman"
     except Exception as e:
-        return None
+        return None, str(e)
 
 # Menyalakan Koneksi Database
-worksheet = konek_gsheets()
+worksheet, pesan_error_db = konek_gsheets()
 
 # Inisialisasi Memori Transaksi (Web)
 if 'riwayat' not in st.session_state:
     st.session_state['riwayat'] = []
 
 st.title("🚀 Kasir RABAY CELL")
+
 # Indikator Database Menyala/Mati
-st.caption("🟢 Terkoneksi ke Google Sheets" if worksheet else "🔴 Database Terputus (Cek Brankas JSON)")
+if worksheet:
+    st.caption("🟢 Terkoneksi ke Google Sheets")
+else:
+    st.error(f"🔴 Database Terputus! Laporan Error Mesin: {pesan_error_db}")
 
 # Fungsi Hitung Admin
 def hitung_admin(nominal, jenis):
