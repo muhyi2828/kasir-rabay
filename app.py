@@ -11,19 +11,25 @@ import pytz
 
 st.set_page_config(page_title="Kasir RABAY CELL PRO", layout="centered")
 
-# 1. KONEKSI DATABASE
 @st.cache_resource
 def konek_gsheets():
     try:
         json_string = st.secrets["GOOGLE_JSON"].strip()
         kredensial = json.loads(json_string)
         gc = gspread.service_account_from_dict(kredensial)
-        return gc.open("Database Kasir")
-    except: return None
+        sh = gc.open("Database Kasir")
+        
+        # Pengaman otomatis membuat tab jika belum ada
+        try: ws_t = sh.worksheet("Transaksi")
+        except: ws_t = sh.add_worksheet(title="Transaksi", rows=1000, cols=5)
+            
+        try: ws_k = sh.worksheet("Kas_Harian")
+        except: ws_k = sh.add_worksheet(title="Kas_Harian", rows=1000, cols=5)
+            
+        return sh, ws_t, ws_k
+    except: return None, None, None
 
-db = konek_gsheets()
-ws_t = db.worksheet("Transaksi") if db else None
-ws_k = db.worksheet("Kas_Harian") if db else None
+db, ws_t, ws_k = konek_gsheets()
 
 # 2. STATE MANAGEMENT
 if 'modal_cash' not in st.session_state: st.session_state['modal_cash'] = 0
@@ -34,12 +40,10 @@ if 'draf_scan' not in st.session_state: st.session_state['draf_scan'] = []
 
 st.title("🚀 Kasir RABAY CELL PRO")
 
-# 3. MODUL KAS AWAL
 with st.expander("💰 Modal Awal Hari Ini"):
     st.session_state['modal_cash'] = st.number_input("Cash di Laci (Rp):", value=st.session_state['modal_cash'], step=50000)
     st.session_state['modal_digi'] = st.number_input("Saldo Digital (Rp):", value=st.session_state['modal_digi'], step=50000)
 
-# 4. FUNGSI HITUNG ADMIN
 def hitung_admin(nominal, jenis):
     if jenis == "E-Wallet" and nominal <= 1500000:
         if nominal <= 98000: return 2000
@@ -165,16 +169,13 @@ with tab1:
                 st.success("Semua data berhasil disimpan & kas terupdate!")
                 st.rerun()
 
-# TAB BARU: MANAJEMEN RIWAYAT TRANSAKSI (HAPUS & EDIT)
 with tab2:
     st.subheader("📋 Kelola Riwayat Transaksi Terakhir")
     if ws_t:
         data_t = ws_t.get_all_values()
         if len(data_t) > 1:
             df_t = pd.DataFrame(data_t[1:], columns=data_t[0])
-            # Tambahkan nomor baris asli di Google Sheets (Baris 2 adalah index 0 di dataframe, maka baris sheet = index + 2)
             df_t['No_Baris'] = range(2, len(df_t) + 2)
-            
             st.dataframe(df_t, use_container_width=True)
             
             st.markdown("---")
@@ -184,7 +185,7 @@ with tab2:
             if st.button("❌ Hapus Baris Terpilih dari Database", type="primary"):
                 try:
                     ws_t.delete_rows(int(baris_hapus))
-                    st.success(f"Berhasil menghapus baris ke-{baris_hapus} dari Google Sheets!")
+                    st.success(f"Berhasil menghapus baris ke-{baris_hapus}!")
                     st.rerun()
                 except Exception as e:
                     st.error(f"Gagal menghapus: {e}")
@@ -218,7 +219,6 @@ with tab3:
             
             st.dataframe(df_filter, use_container_width=True)
             
-            # Grafik Tren Keuangan
             fig = px.line(df_filter, x='Tanggal', y=['Modal_Cash', 'Modal_Digital'], 
                           labels={'value': 'Jumlah (Rp)', 'variable': 'Jenis Kas'},
                           title=f"Grafik Perkembangan Kas - {bulan_pilih}")
