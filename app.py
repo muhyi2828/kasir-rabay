@@ -379,8 +379,8 @@ with tab1:
                 """, unsafe_allow_html=True)
 
                 client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
-                # Menggunakan model resmi rekomendasi sistem: gemini-3.6-flash
-                res = client.models.generate_content(model='gemini-3.6-flash', contents=[img_temp, "Tulis semua nominal transaksi beserta tandanya (+ atau -). Balas dengan format angka dipisah koma, contoh: +9067000,-75000,-5000000"])
+                # Menggunakan model gemini-3.5-flash-lite
+                res = client.models.generate_content(model='gemini-3.5-flash-lite', contents=[img_temp, "Tulis semua nominal transaksi beserta tandanya (+ atau -). Balas dengan format angka dipisah koma, contoh: +9067000,-75000,-5000000"])
                 
                 lens_placeholder.empty()
 
