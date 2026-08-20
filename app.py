@@ -38,6 +38,7 @@ st.markdown("""
     .stTabs [data-baseweb="tab-list"] {
         gap: 10px;
         background-color: transparent;
+        overflow-x: auto;
     }
     .stTabs [data-baseweb="tab"] {
         border-radius: 4px !important;
@@ -45,6 +46,7 @@ st.markdown("""
         background-color: transparent !important;
         padding: 10px 15px !important;
         font-weight: 600 !important;
+        white-space: nowrap;
     }
     .stTabs [aria-selected="true"] {
         background-color: #14B8A6 !important;
@@ -90,38 +92,6 @@ st.markdown("""
         padding-bottom: 90px;
     }
 
-    /* --- ANIMASI GOOGLE LENS SCANNER --- */
-    .lens-container {
-        position: relative;
-        width: 100%;
-        max-width: 350px;
-        margin: 15px auto;
-        border-radius: 12px;
-        overflow: hidden;
-        border: 2px solid #14B8A6;
-        box-shadow: 0 0 20px rgba(20, 184, 166, 0.3);
-    }
-    .lens-container img {
-        width: 100%;
-        display: block;
-        border-radius: 10px;
-    }
-    .scan-line {
-        position: absolute;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 4px;
-        background-color: #14B8A6;
-        box-shadow: 0 0 12px #14B8A6, 0 0 20px #14B8A6;
-        animation: scanAnimation 2s infinite ease-in-out;
-    }
-    @keyframes scanAnimation {
-        0% { top: 0%; opacity: 0.8; }
-        50% { opacity: 1; }
-        100% { top: 100%; opacity: 0.8; }
-    }
-    
     /* Login Box */
     .login-box {
         background-color: #111;
@@ -142,74 +112,94 @@ def f_uang(val):
     except:
         return str(val)
 
-# --- SISTEM LOGIN CABANG ---
-if 'cabang_terpilih' not in st.session_state:
-    st.session_state['cabang_terpilih'] = None
-
-if not st.session_state['cabang_terpilih']:
-    st.markdown('<div class="login-box">', unsafe_allow_html=True)
-    st.markdown("<h2 style='text-align: center; color: #14B8A6; margin-bottom: 20px;'>LOGIN CABANG<br>RABAY CELL</h2>", unsafe_allow_html=True)
-    
-    pilihan_c = st.selectbox("Pilih Cabang Tempat Anda Bertugas:", ["Pusat", "Cabang 2", "Cabang 3"])
-    st.markdown("<br>", unsafe_allow_html=True)
-    if st.button("🚀 MASUK KE KASIR", type="primary", use_container_width=True):
-        st.session_state['cabang_terpilih'] = pilihan_c
-        st.rerun()
-    st.markdown('</div>', unsafe_allow_html=True)
-    st.stop() # Berhenti eksekusi kode di bawah jika belum login
-
-# --- SIDEBAR INFO CABANG ---
-st.sidebar.markdown(f"### 📍 Cabang Aktif:\n## <span style='color:#14B8A6;'>{st.session_state['cabang_terpilih']}</span>", unsafe_allow_html=True)
-st.sidebar.markdown("---")
-if st.sidebar.button("🔄 Ganti Cabang / Logout", use_container_width=True):
-    st.session_state['cabang_terpilih'] = None
-    # Bersihkan state yang berhubungan dengan cabang lama
-    if 'modal_cash' in st.session_state: del st.session_state['modal_cash']
-    if 'modal_digi' in st.session_state: del st.session_state['modal_digi']
-    st.session_state['keranjang_belanja'] = []
-    st.session_state['draf_scan_smart'] = []
-    st.rerun()
-
-# --- FUNGSI KONEKSI DATABASE BERDASARKAN CABANG ---
+# --- FUNGSI KONEKSI MASTER GOOGLE SHEETS ---
 @st.cache_resource
-def konek_gsheets(nama_cabang):
+def init_gsheets():
     try:
         json_string = st.secrets["GOOGLE_JSON"].strip()
         kredensial = json.loads(json_string)
         gc = gspread.service_account_from_dict(kredensial)
         sh = gc.open("Database Kasir")
+        return sh
+    except: return None
+
+sh_master = init_gsheets()
+
+# --- FUNGSI AMBIL KREDENSIAL AKUN MASTER DARI DATABASE ---
+def get_master_credentials(sh):
+    if not sh: return "admin", "123", None
+    try:
+        ws_akun = sh.worksheet("Pengaturan_Akun")
+    except:
+        ws_akun = sh.add_worksheet(title="Pengaturan_Akun", rows=2, cols=2)
+        ws_akun.append_row(["Username", "Password"])
+        ws_akun.append_row(["admin", "123"]) # Akun bawaan pertama kali
         
-        # Buat nama worksheet spesifik untuk tiap cabang
-        s_tr = f"Transaksi_{nama_cabang}"
-        s_ks = f"Kas_Harian_{nama_cabang}"
-        s_st = f"Stok_{nama_cabang}"
-        
-        try: ws_t = sh.worksheet(s_tr)
-        except: ws_t = sh.add_worksheet(title=s_tr, rows=1000, cols=6)
-            
-        try: ws_k = sh.worksheet(s_ks)
-        except: ws_k = sh.add_worksheet(title=s_ks, rows=1000, cols=5)
+    data = ws_akun.get_all_values()
+    if len(data) > 1:
+        return data[1][0], data[1][1], ws_akun
+    return "admin", "123", ws_akun
 
-        try: ws_s = sh.worksheet(s_st)
-        except: ws_s = sh.add_worksheet(title=s_st, rows=1000, cols=7)
-            
-        return sh, ws_t, ws_k, ws_s
-    except: return None, None, None, None
+db_user, db_pass, ws_akun_master = get_master_credentials(sh_master)
 
-db, ws_t, ws_k, ws_s = konek_gsheets(st.session_state['cabang_terpilih'])
+# --- SISTEM LOGIN MASTER TAHAN REFRESH ---
+if 'is_logged_in' not in st.session_state:
+    if st.query_params.get("auth") == "1":
+        st.session_state['is_logged_in'] = True
+    else:
+        st.session_state['is_logged_in'] = False
 
-# --- FUNGSI BACA & UPDATE MODAL KE DATABASE ---
+if 'cabang_terpilih' not in st.session_state:
+    if st.query_params.get("cabang"):
+        st.session_state['cabang_terpilih'] = st.query_params.get("cabang")
+    else:
+        st.session_state['cabang_terpilih'] = "Pusat" # Default Cabang
+
+# Tampilan Login Jika Belum Masuk
+if not st.session_state['is_logged_in']:
+    st.markdown('<div class="login-box">', unsafe_allow_html=True)
+    st.markdown("<h2 style='color: #14B8A6; margin-bottom: 20px;'>LOGIN MASTER<br>RABAY CELL</h2>", unsafe_allow_html=True)
+    
+    input_user = st.text_input("Username:")
+    input_pass = st.text_input("Password:", type="password")
+    
+    st.markdown("<br>", unsafe_allow_html=True)
+    if st.button("🚀 MASUK SISTEM", type="primary", use_container_width=True):
+        if input_user == db_user and input_pass == db_pass:
+            st.session_state['is_logged_in'] = True
+            st.query_params["auth"] = "1"
+            st.query_params["cabang"] = st.session_state['cabang_terpilih']
+            st.success("Akses Diterima!")
+            st.rerun()
+        else:
+            st.error("❌ Username atau Password salah!")
+    st.markdown('</div>', unsafe_allow_html=True)
+    st.stop() # Hentikan eksekusi kode di bawah jika belum login
+
+# --- FUNGSI AMBIL DATABASE BERDASARKAN CABANG TERPILIH ---
+def get_branch_worksheets(sh, cabang):
+    if not sh: return None, None, None
+    s_tr, s_ks, s_st = f"Transaksi_{cabang}", f"Kas_Harian_{cabang}", f"Stok_{cabang}"
+    try: ws_t = sh.worksheet(s_tr)
+    except: ws_t = sh.add_worksheet(title=s_tr, rows=1000, cols=6)
+    try: ws_k = sh.worksheet(s_ks)
+    except: ws_k = sh.add_worksheet(title=s_ks, rows=1000, cols=5)
+    try: ws_s = sh.worksheet(s_st)
+    except: ws_s = sh.add_worksheet(title=s_st, rows=1000, cols=7)
+    return ws_t, ws_k, ws_s
+
+ws_t, ws_k, ws_s = get_branch_worksheets(sh_master, st.session_state['cabang_terpilih'])
+
+# --- FUNGSI BACA & UPDATE MODAL ---
 def ambil_modal_terakhir():
     if ws_k:
         try:
             data_k = ws_k.get_all_values()
-            if len(data_k) > 1: 
-                baris_terakhir = data_k[-1]
-                return int(baris_terakhir[1]), int(baris_terakhir[2])
+            if len(data_k) > 1: return int(data_k[-1][1]), int(data_k[-1][2])
         except: pass
     return 0, 0
 
-# --- INISIALISASI STATE ---
+# --- INISIALISASI STATE TRANSAKSI ---
 if 'modal_cash' not in st.session_state or 'modal_digi' not in st.session_state:
     c_awal, d_awal = ambil_modal_terakhir()
     st.session_state['modal_cash'] = c_awal
@@ -260,7 +250,7 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 # --- TAB NAVIGASI ---
-tab1, tab2, tab3, tab4 = st.tabs(["TRANSAKSI", "RIWAYAT", "DASHBOARD", "STOK BARANG"])
+tab1, tab2, tab3, tab4, tab5 = st.tabs(["TRANSAKSI", "RIWAYAT", "DASHBOARD", "STOK BARANG", "⚙️ SETELAN"])
 
 with tab1:
     metode = st.radio("Metode Input:", ["Ketik Manual / Barcode", "AI Scan Mutasi Foto"], horizontal=True, label_visibility="collapsed")
@@ -505,7 +495,7 @@ with tab1:
 
 # --- TAB 2: RIWAYAT ---
 with tab2:
-    st.subheader(f"📋 Daftar Riwayat Transaksi - {st.session_state['cabang_terpilih']}")
+    st.subheader(f"📋 Daftar Riwayat - {st.session_state['cabang_terpilih']}")
     if ws_t:
         data_t = ws_t.get_all_values()
         if len(data_t) > 1:
@@ -736,7 +726,7 @@ with tab4:
                 st.rerun()
 
     st.markdown("---")
-    st.subheader(f"📋 Daftar Stok Tersedia - {st.session_state['cabang_terpilih']}")
+    st.subheader(f"📋 Daftar Stok - {st.session_state['cabang_terpilih']}")
     if ws_s:
         data_s = ws_s.get_all_values()
         if len(data_s) > 1:
@@ -817,3 +807,47 @@ with tab4:
                 st.markdown("<hr style='margin:5px 0; border-color:#333;'>", unsafe_allow_html=True)
         else:
             st.info("Belum ada data stok.")
+
+# --- TAB 5: SETELAN & AKUN ---
+with tab5:
+    st.markdown("### 🔄 Pindah Cabang")
+    daftar_cabang = ["Pusat", "Cabang 2", "Cabang 3"]
+    idx_cabang_aktif = daftar_cabang.index(st.session_state['cabang_terpilih']) if st.session_state['cabang_terpilih'] in daftar_cabang else 0
+    pilihan_pindah = st.selectbox("Ganti Akses Cabang Ke:", daftar_cabang, index=idx_cabang_aktif)
+    
+    if st.button("✅ Terapkan Cabang", type="primary", use_container_width=True):
+        st.session_state['cabang_terpilih'] = pilihan_pindah
+        st.query_params["cabang"] = pilihan_pindah
+        # Hapus state spesifik cabang sebelumnya
+        if 'modal_cash' in st.session_state: del st.session_state['modal_cash']
+        if 'modal_digi' in st.session_state: del st.session_state['modal_digi']
+        st.session_state['keranjang_belanja'] = []
+        st.session_state['draf_scan_smart'] = []
+        st.success(f"Berhasil pindah akses ke {pilihan_pindah}!")
+        st.rerun()
+
+    st.markdown("---")
+    st.markdown("### 🔐 Pengaturan Akun Master")
+    st.info("Akun ini digunakan untuk mengontrol seluruh cabang. Hati-hati saat mengubahnya.")
+    
+    with st.form("form_ubah_akun"):
+        user_baru = st.text_input("Username Master Baru", value=db_user)
+        pass_baru = st.text_input("Password Master Baru", value=db_pass, type="password")
+        
+        if st.form_submit_button("Simpan Perubahan Akun"):
+            if user_baru and pass_baru:
+                if ws_akun_master:
+                    ws_akun_master.update_cell(2, 1, user_baru)
+                    ws_akun_master.update_cell(2, 2, pass_baru)
+                    st.success("Username & Password berhasil diperbarui! Silakan catat baik-baik.")
+                else:
+                    st.error("Gagal terhubung ke database setelan.")
+            else:
+                st.error("Form tidak boleh ada yang kosong!")
+
+    st.markdown("---")
+    if st.button("🚪 Keluar / Logout Aplikasi", use_container_width=True):
+        st.session_state['is_logged_in'] = False
+        if "auth" in st.query_params: del st.query_params["auth"]
+        if "cabang" in st.query_params: del st.query_params["cabang"]
+        st.rerun()
