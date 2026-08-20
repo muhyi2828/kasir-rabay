@@ -12,7 +12,7 @@ import pytz
 # --- KONFIGURASI HALAMAN HARUS PALING ATAS ---
 st.set_page_config(page_title="RABAY CELL PRO", layout="centered", page_icon="🚀", initial_sidebar_state="collapsed")
 
-# --- CUSTOM CSS UI MODERN DARK MODE ALA RABAY CELL ---
+# --- CUSTOM CSS UI MODERN DARK MODE & FLOATING BUTTON ALA RABAY CELL ---
 st.markdown("""
     <style>
     /* Paksa Background Gelap */
@@ -70,6 +70,23 @@ st.markdown("""
     .metric-card-blue { background-color: #1E1E1E; padding: 20px; border-radius: 12px; border-left: 5px solid #14B8A6; margin-bottom: 15px; }
     .metric-card-green { background-color: #1E1E1E; padding: 20px; border-radius: 12px; border-left: 5px solid #2ca02c; margin-bottom: 15px; }
     
+    /* Tombol Floating Melayang di Bagian Bawah Layar */
+    .floating-container {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        background-color: rgba(5, 5, 5, 0.95);
+        padding: 12px 16px;
+        z-index: 99999;
+        border-top: 1px solid #222;
+        box-shadow: 0 -4px 10px rgba(0,0,0,0.8);
+    }
+    
+    /* Berijarak bawah pada konten agar tidak tertutup tombol floating */
+    .main .block-container {
+        padding-bottom: 90px;
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -265,6 +282,9 @@ with tab1:
                 c2.metric("Tagih Pelanggan", f"{f_uang(total_uang)}")
             
             st.markdown("<br>", unsafe_allow_html=True)
+            
+            # --- TOMBOL SIMPAN LANGSUNG FLOATING DI BAWAH ---
+            st.markdown('<div class="floating-container">', unsafe_allow_html=True)
             col_b1, col_b2 = st.columns(2)
             with col_b1:
                 if st.button("💾 SIMPAN LANGSUNG", type="primary", use_container_width=True):
@@ -285,6 +305,7 @@ with tab1:
                     })
                     st.success("Masuk keranjang!")
                     st.rerun()
+            st.markdown('</div>', unsafe_allow_html=True)
 
         if st.session_state['keranjang_belanja']:
             st.markdown("---")
@@ -356,7 +377,6 @@ with tab1:
             indices_to_delete = []
             
             for i, item in enumerate(st.session_state['draf_scan_smart']):
-                # Tombol Hapus Kecil di Sebelah Kanan Teks Nominal
                 col_h1, col_h2 = st.columns([6, 1])
                 with col_h1:
                     st.markdown(f"**Trx #{i+1} ({item['Tanda']})** - {f_uang(item['Nominal (Rp)'])}")
@@ -383,6 +403,8 @@ with tab1:
                 st.session_state['draf_scan_smart'] = [item for idx, item in enumerate(st.session_state['draf_scan_smart']) if idx not in indices_to_delete]
                 st.rerun()
 
+            # --- TOMBOL SIMPAN SEMUA OCR FLOATING DI BAWAH ---
+            st.markdown('<div class="floating-container">', unsafe_allow_html=True)
             if st.button("💾 SIMPAN SEMUA TRANSAKSI OCR", type="primary", use_container_width=True):
                 waktu = datetime.now(pytz.timezone('Asia/Jakarta')).strftime("%Y-%m-%d %H:%M:%S")
                 for i, item in enumerate(st.session_state['draf_scan_smart']):
@@ -396,6 +418,7 @@ with tab1:
                 st.session_state['draf_scan_smart'] = []
                 st.success("Semua transaksi berhasil disimpan!")
                 st.rerun()
+            st.markdown('</div>', unsafe_allow_html=True)
 
 # --- TAB 2: RIWAYAT ---
 with tab2:
@@ -428,7 +451,7 @@ with tab2:
             
             with st.expander("⚠️ Hapus Semua Riwayat Transaksi"):
                 st.warning("PERINGATAN: Seluruh data riwayat transaksi akan dihapus permanen!")
-                konfirm_hapus_semua = st.checkbox("Saya yakin ingin menghapus semua riwayat", key="chk_del_all_trx")
+                konfirm_hapus_semua = st.checkbox("Iya, saya yakin ingin menghapus semua riwayat", key="chk_del_all_trx")
                 if konfirm_hapus_semua:
                     if st.button("🗑️ Hapus Permanen Semua Riwayat", type="primary"):
                         ws_t.clear()
