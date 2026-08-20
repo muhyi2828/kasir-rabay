@@ -125,24 +125,37 @@ def init_gsheets():
 
 sh_master = init_gsheets()
 
-# --- FUNGSI AMBIL KREDENSIAL AKUN MASTER DARI DATABASE ---
-def get_master_credentials(sh):
-    if not sh: return "admin", "123", None
+# --- FUNGSI AMBIL KREDENSIAL AKUN MASTER & LIST CABANG DARI DATABASE ---
+def get_master_data(sh):
+    if not sh: return "admin", "123", ["RABAY01", "Medang", "G. BATU"], None
     try:
         ws_akun = sh.worksheet("Pengaturan_Akun")
     except:
-        ws_akun = sh.add_worksheet(title="Pengaturan_Akun", rows=2, cols=2)
+        ws_akun = sh.add_worksheet(title="Pengaturan_Akun", rows=10, cols=3)
+        ws_akun.append_row(["Username", "Password", "Daftar_Cabang"])
+        ws_akun.append_row(["admin", "123", "RABAY01,Medang,G. BATU"])
         
     data = ws_akun.get_all_values()
+    username, password = "admin", "123"
+    cabang_list = ["RABAY01", "Medang", "G. BATU"]
+    
     if len(data) > 1 and len(data[1]) >= 2:
-        return data[1][0], data[1][1], ws_akun
+        username = data[1][0]
+        password = data[1][1]
+        if len(data[1]) >= 3 and data[1][2].strip():
+            cabang_list = [c.strip() for c in data[1][2].split(",") if c.strip()]
     else:
         ws_akun.clear()
-        ws_akun.append_row(["Username", "Password"])
-        ws_akun.append_row(["admin", "123"])
-        return "admin", "123", ws_akun
+        ws_akun.append_row(["Username", "Password", "Daftar_Cabang"])
+        ws_akun.append_row(["admin", "123", "RABAY01,Medang,G. BATU"])
+        
+    return username, password, cabang_list, ws_akun
 
-db_user, db_pass, ws_akun_master = get_master_credentials(sh_master)
+db_user, db_pass, daftar_cabang, ws_akun_master = get_master_data(sh_master)
+
+# Simpan daftar cabang ke session state supaya bisa diperbarui secara dinamis
+if 'daftar_cabang' not in st.session_state:
+    st.session_state['daftar_cabang'] = daftar_cabang
 
 # --- SISTEM LOGIN MASTER TAHAN REFRESH ---
 if 'is_logged_in' not in st.session_state:
@@ -152,10 +165,10 @@ if 'is_logged_in' not in st.session_state:
         st.session_state['is_logged_in'] = False
 
 if 'cabang_terpilih' not in st.session_state:
-    if st.query_params.get("cabang"):
+    if st.query_params.get("cabang") and st.query_params.get("cabang") in st.session_state['daftar_cabang']:
         st.session_state['cabang_terpilih'] = st.query_params.get("cabang")
     else:
-        st.session_state['cabang_terpilih'] = "Pusat"
+        st.session_state['cabang_terpilih'] = st.session_state['daftar_cabang'][0]
 
 # Tampilan Login Jika Belum Masuk
 if not st.session_state['is_logged_in']:
@@ -815,9 +828,8 @@ with tab4:
 
 # --- TAB 5: SETELAN & AKUN ---
 with tab5:
-    daftar_cabang = ["Pusat", "Cabang 2", "Cabang 3"]
-    idx_cabang_aktif = daftar_cabang.index(st.session_state['cabang_terpilih']) if st.session_state['cabang_terpilih'] in daftar_cabang else 0
-    pilihan_pindah = st.selectbox("Ganti Akses Cabang Ke:", daftar_cabang, index=idx_cabang_aktif)
+    idx_cabang_aktif = st.session_state['daftar_cabang'].index(st.session_state['cabang_terpilih']) if st.session_state['cabang_terpilih'] in st.session_state['daftar_cabang'] else 0
+    pilihan_pindah = st.selectbox("Ganti Akses Cabang Ke:", st.session_state['daftar_cabang'], index=idx_cabang_aktif)
     
     if st.button("PINDAH CABANG", type="primary", use_container_width=True):
         st.session_state['cabang_terpilih'] = pilihan_pindah
@@ -828,6 +840,25 @@ with tab5:
         st.session_state['draf_scan_smart'] = []
         st.success(f"Berhasil pindah akses ke {pilihan_pindah}!")
         st.rerun()
+
+    st.markdown("---")
+    st.markdown("### ➕ Tambah Cabang Baru")
+    with st.form("form_tambah_cabang"):
+        nama_cabang_baru = st.text_input("Nama Cabang Baru (Contoh: Cabang 4)")
+        if st.form_submit_button("TAMBAH CABANG BARU"):
+            cabang_bersih = nama_cabang_baru.strip()
+            if cabang_bersih:
+                if cabang_bersih not in st.session_state['daftar_cabang']:
+                    st.session_state['daftar_cabang'].append(cabang_bersih)
+                    gabungan_str = ",".join(st.session_state['daftar_cabang'])
+                    if ws_akun_master:
+                        ws_akun_master.update_cell(2, 3, gabungan_str)
+                    st.success(f"Cabang '{cabang_bersih}' berhasil ditambahkan!")
+                    st.rerun()
+                else:
+                    st.error("Nama cabang tersebut sudah ada!")
+            else:
+                st.error("Nama cabang tidak boleh kosong!")
 
     st.markdown("---")
     st.markdown("### 🔐 Pengaturan Akun Master")
