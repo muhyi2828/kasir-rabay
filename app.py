@@ -12,7 +12,7 @@ import pytz
 # --- KONFIGURASI HALAMAN HARUS PALING ATAS ---
 st.set_page_config(page_title="RABAY CELL PRO", layout="centered", page_icon="🚀", initial_sidebar_state="collapsed")
 
-# --- CUSTOM CSS UI MODERN DARK MODE & FLOATING BUTTON ALA RABAY CELL ---
+# --- CUSTOM CSS UI MODERN DARK MODE, FLOATING BUTTON & ANIMASI GOOGLE LENS ---
 st.markdown("""
     <style>
     /* Paksa Background Gelap */
@@ -86,6 +86,38 @@ st.markdown("""
     /* Berijarak bawah pada konten agar tidak tertutup tombol floating */
     .main .block-container {
         padding-bottom: 90px;
+    }
+
+    /* --- ANIMASI GOOGLE LENS SCANNER --- */
+    .lens-container {
+        position: relative;
+        width: 100%;
+        max-width: 350px;
+        margin: 15px auto;
+        border-radius: 12px;
+        overflow: hidden;
+        border: 2px solid #14B8A6;
+        box-shadow: 0 0 20px rgba(20, 184, 166, 0.3);
+    }
+    .lens-container img {
+        width: 100%;
+        display: block;
+        border-radius: 10px;
+    }
+    .scan-line {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 4px;
+        background-color: #14B8A6;
+        box-shadow: 0 0 12px #14B8A6, 0 0 20px #14B8A6;
+        animation: scanAnimation 2s infinite ease-in-out;
+    }
+    @keyframes scanAnimation {
+        0% { top: 0%; opacity: 0.8; }
+        50% { opacity: 1; }
+        100% { top: 100%; opacity: 0.8; }
     }
     </style>
 """, unsafe_allow_html=True)
@@ -283,7 +315,7 @@ with tab1:
             
             st.markdown("<br>", unsafe_allow_html=True)
             
-            # --- TOMBOL SIMPAN LANGSUNG FLOATING DI BAWAH ---
+            # --- TOMBOL SIMPAN LANGSUNG FLOATING ---
             st.markdown('<div class="floating-container">', unsafe_allow_html=True)
             col_b1, col_b2 = st.columns(2)
             with col_b1:
@@ -339,25 +371,52 @@ with tab1:
 
     else: 
         sumber_gambar = st.file_uploader("Upload Screenshot Mutasi:", type=["jpg", "jpeg", "png"])
+        
+        if sumber_gambar:
+            # Tampilkan Preview Gambar Besar
+            st.markdown("<p style='color:#ccc; font-size:14px; margin-bottom:5px;'>Preview Screenshot:</p>", unsafe_allow_html=True)
+            st.image(sumber_gambar, use_container_width=True)
+
         if sumber_gambar and st.button("🔍 AI SCAN OTOMATIS (+/-)", use_container_width=True, type="primary"):
             try:
-                with st.spinner("Membaca angka..."):
-                    client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
-                    img = Image.open(sumber_gambar)
-                    res = client.models.generate_content(model='gemini-3.6-flash', contents=[img, "Tulis semua nominal transaksi beserta tandanya (+ atau -). Balas dengan format angka dipisah koma, contoh: +9067000,-75000,-5000000"])
-                    
-                    raw_text = res.text.replace(" ", "")
-                    items = raw_text.split(',')
-                    processed_data = []
-                    for idx, item in enumerate(items):
-                        if '+' in item or '-' in item:
-                            nom_val = int(re.sub(r'[^0-9]', '', item))
-                            kategori = 'Tarik Tunai' if '+' in item else 'Bank'
-                            tanda_simbol = '+' if '+' in item else '-'
-                            processed_data.append({'Tanda': tanda_simbol, 'Jenis Otomatis': kategori, 'Nominal (Rp)': nom_val})
-                            st.session_state[f"ocr_jns_{idx}"] = kategori
-                    st.session_state['draf_scan_smart'] = processed_data
-            except Exception as e: st.error(f"Gagal scan: {e}")
+                # Placeholder Animasi Google Lens
+                lens_placeholder = st.empty()
+                img_temp = Image.open(sumber_gambar)
+                
+                # Konversi gambar ke base64 untuk HTML/CSS Animasi Scanner
+                import io
+                buffered = io.BytesIO()
+                img_temp.save(buffered, format="JPEG")
+                import base64
+                img_str = base64.b64encode(buffered.getvalue()).decode()
+
+                lens_placeholder.markdown(f"""
+                    <div class="lens-container">
+                        <div class="scan-line"></div>
+                        <img src="data:image/jpeg;base64,{img_str}"/>
+                    </div>
+                    <p style="text-align:center; color:#14B8A6; font-weight:bold; font-size:15px; margin-top:10px;">🔍 Sedang Membaca Angka Transaksi...</p>
+                """, unsafe_allow_html=True)
+
+                client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
+                res = client.models.generate_content(model='gemini-3.6-flash', contents=[img_temp, "Tulis semua nominal transaksi beserta tandanya (+ atau -). Balas dengan format angka dipisah koma, contoh: +9067000,-75000,-5000000"])
+                
+                lens_placeholder.empty() # Hapus animasi setelah selesai
+
+                raw_text = res.text.replace(" ", "")
+                items = raw_text.split(',')
+                processed_data = []
+                for idx, item in enumerate(items):
+                    if '+' in item or '-' in item:
+                        nom_val = int(re.sub(r'[^0-9]', '', item))
+                        kategori = 'Tarik Tunai' if '+' in item else 'Bank'
+                        tanda_simbol = '+' if '+' in item else '-'
+                        processed_data.append({'Tanda': tanda_simbol, 'Jenis Otomatis': kategori, 'Nominal (Rp)': nom_val})
+                        st.session_state[f"ocr_jns_{idx}"] = kategori
+                st.session_state['draf_scan_smart'] = processed_data
+                st.rerun()
+            except Exception as e: 
+                st.error(f"Gagal scan: {e}")
 
         if st.session_state['draf_scan_smart']:
             st.markdown("---")
@@ -403,7 +462,7 @@ with tab1:
                 st.session_state['draf_scan_smart'] = [item for idx, item in enumerate(st.session_state['draf_scan_smart']) if idx not in indices_to_delete]
                 st.rerun()
 
-            # --- TOMBOL SIMPAN SEMUA OCR FLOATING DI BAWAH ---
+            # --- TOMBOL SIMPAN SEMUA OCR FLOATING ---
             st.markdown('<div class="floating-container">', unsafe_allow_html=True)
             if st.button("💾 SIMPAN SEMUA TRANSAKSI OCR", type="primary", use_container_width=True):
                 waktu = datetime.now(pytz.timezone('Asia/Jakarta')).strftime("%Y-%m-%d %H:%M:%S")
