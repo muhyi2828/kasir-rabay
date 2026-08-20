@@ -125,7 +125,7 @@ def init_gsheets():
 
 sh_master = init_gsheets()
 
-# --- FUNGSI AMBIL KREDENSIAL AKUN MASTER DARI DATABASE (AMAN DARI KOSONG) ---
+# --- FUNGSI AMBIL KREDENSIAL AKUN MASTER DARI DATABASE ---
 def get_master_credentials(sh):
     if not sh: return "admin", "123", None
     try:
@@ -137,7 +137,6 @@ def get_master_credentials(sh):
     if len(data) > 1 and len(data[1]) >= 2:
         return data[1][0], data[1][1], ws_akun
     else:
-        # Jika sheet kosong, otomatis isi data default admin / 123
         ws_akun.clear()
         ws_akun.append_row(["Username", "Password"])
         ws_akun.append_row(["admin", "123"])
@@ -496,7 +495,6 @@ with tab1:
 
 # --- TAB 2: RIWAYAT ---
 with tab2:
-    st.subheader(f"📋 Daftar Riwayat - {st.session_state['cabang_terpilih']}")
     if ws_t:
         data_t = ws_t.get_all_values()
         if len(data_t) > 1:
@@ -731,7 +729,6 @@ with tab4:
                 st.rerun()
 
     st.markdown("---")
-    st.subheader(f"📋 Daftar Stok - {st.session_state['cabang_terpilih']}")
     if ws_s:
         data_s = ws_s.get_all_values()
         if len(data_s) > 1:
@@ -818,12 +815,11 @@ with tab4:
 
 # --- TAB 5: SETELAN & AKUN ---
 with tab5:
-    st.markdown("### 🔄 Pindah Cabang")
     daftar_cabang = ["Pusat", "Cabang 2", "Cabang 3"]
     idx_cabang_aktif = daftar_cabang.index(st.session_state['cabang_terpilih']) if st.session_state['cabang_terpilih'] in daftar_cabang else 0
     pilihan_pindah = st.selectbox("Ganti Akses Cabang Ke:", daftar_cabang, index=idx_cabang_aktif)
     
-    if st.button("✅ Terapkan Cabang", type="primary", use_container_width=True):
+    if st.button("PINDAH CABANG", type="primary", use_container_width=True):
         st.session_state['cabang_terpilih'] = pilihan_pindah
         st.query_params["cabang"] = pilihan_pindah
         if 'modal_cash' in st.session_state: del st.session_state['modal_cash']
