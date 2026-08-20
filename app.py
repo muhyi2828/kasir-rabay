@@ -328,12 +328,14 @@ with tab1:
                     raw_text = res.text.replace(" ", "")
                     items = raw_text.split(',')
                     processed_data = []
-                    for item in items:
+                    for idx, item in enumerate(items):
                         if '+' in item or '-' in item:
                             nom_val = int(re.sub(r'[^0-9]', '', item))
                             kategori = 'Tarik Tunai' if '+' in item else 'Bank'
                             tanda_simbol = '+' if '+' in item else '-'
                             processed_data.append({'Tanda': tanda_simbol, 'Jenis Otomatis': kategori, 'Nominal (Rp)': nom_val})
+                            # Inisialisasi state widget selectbox agar sinkron
+                            st.session_state[f"ocr_jns_{idx}"] = kategori
                     st.session_state['draf_scan_smart'] = processed_data
             except Exception as e: st.error(f"Gagal scan: {e}")
 
@@ -344,14 +346,15 @@ with tab1:
             st.markdown("<b>Ubah Jenis Semua Transaksi Minus (-) Sekaligus:</b>", unsafe_allow_html=True)
             mass_minus_choice = st.selectbox("Pilih Jenis untuk Semua Min (-)", options=["Bank", "E-Wallet", "Tarik Tunai"], key="mass_min_select")
             if st.button("🔄 Terapkan ke Semua Min (-)", use_container_width=True):
-                for item in st.session_state['draf_scan_smart']:
+                for idx, item in enumerate(st.session_state['draf_scan_smart']):
                     if item['Tanda'] == '-':
                         item['Jenis Otomatis'] = mass_minus_choice
+                        # Perbarui state selectbox agar UI ikut berubah secara real-time
+                        st.session_state[f"ocr_jns_{idx}"] = mass_minus_choice
                 st.success("Semua transaksi minus (-) berhasil diubah!")
                 st.rerun()
 
             st.markdown("<br>", unsafe_allow_html=True)
-            temp_updated_draf = []
             indices_to_delete = []
             
             for i, item in enumerate(st.session_state['draf_scan_smart']):
@@ -367,17 +370,14 @@ with tab1:
                     st.markdown("<p style='color:#14B8A6; font-size:13px; margin:0;'>Jenis: <b>Tarik Tunai (Otomatis)</b></p>", unsafe_allow_html=True)
                 else:
                     pilihan_opsi_ocr = ["Bank", "E-Wallet", "Tarik Tunai"]
-                    def_idx_ocr = pilihan_opsi_ocr.index(item['Jenis Otomatis']) if item['Jenis Otomatis'] in pilihan_opsi_ocr else 0
-                    jns_pilih = st.selectbox(f"Pilih Jenis Trx #{i+1}", options=pilihan_opsi_ocr, index=def_idx_ocr, key=f"ocr_jns_{i}")
+                    if f"ocr_jns_{i}" not in st.session_state:
+                        st.session_state[f"ocr_jns_{i}"] = item['Jenis Otomatis']
+                    
+                    jns_pilih = st.selectbox(f"Pilih Jenis Trx #{i+1}", options=pilihan_opsi_ocr, key=f"ocr_jns_{i}")
+                    item['Jenis Otomatis'] = jns_pilih
                 
                 est_admin = hitung_admin(item['Nominal (Rp)'], jns_pilih)
                 st.markdown(f"<p style='color:#2ca02c; font-size:13px; margin-top:2px;'>💰 Estimasi Admin (Cuan): <b>{f_uang(est_admin)}</b></p>", unsafe_allow_html=True)
-                
-                temp_updated_draf.append({
-                    'Tanda': item['Tanda'],
-                    'Jenis Otomatis': jns_pilih,
-                    'Nominal (Rp)': item['Nominal (Rp)']
-                })
                 st.markdown("<hr style='margin:10px 0; border-color:#333;'>", unsafe_allow_html=True)
             
             if indices_to_delete:
@@ -386,13 +386,8 @@ with tab1:
 
             if st.button("💾 SIMPAN SEMUA TRANSAKSI OCR", type="primary", use_container_width=True):
                 waktu = datetime.now(pytz.timezone('Asia/Jakarta')).strftime("%Y-%m-%d %H:%M:%S")
-                for i, item in enumerate(temp_updated_draf):
-                    # Ambil langsung dari widget selectbox aktif untuk memastikan pilihan terbaru yang tersimpan
-                    if item['Tanda'] == '+':
-                        jenis = "Tarik Tunai"
-                    else:
-                        jenis = st.session_state.get(f"ocr_jns_{i}", item['Jenis Otomatis'])
-                        
+                for i, item in enumerate(st.session_state['draf_scan_smart']):
+                    jenis = "Tarik Tunai" if item['Tanda'] == '+' else st.session_state.get(f"ocr_jns_{i}", item['Jenis Otomatis'])
                     nom = item['Nominal (Rp)']
                     admin = hitung_admin(nom, jenis)
                     total = nom - admin if jenis == "Tarik Tunai" else nom + admin
