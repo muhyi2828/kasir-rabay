@@ -121,6 +121,16 @@ st.markdown("""
         50% { opacity: 1; }
         100% { top: 100%; opacity: 0.8; }
     }
+    
+    /* Login Box */
+    .login-box {
+        background-color: #111;
+        padding: 30px;
+        border-radius: 12px;
+        border: 1px solid #14B8A6;
+        margin-top: 50px;
+        text-align: center;
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -132,27 +142,61 @@ def f_uang(val):
     except:
         return str(val)
 
+# --- SISTEM LOGIN CABANG ---
+if 'cabang_terpilih' not in st.session_state:
+    st.session_state['cabang_terpilih'] = None
+
+if not st.session_state['cabang_terpilih']:
+    st.markdown('<div class="login-box">', unsafe_allow_html=True)
+    st.markdown("<h2 style='text-align: center; color: #14B8A6; margin-bottom: 20px;'>LOGIN CABANG<br>RABAY CELL</h2>", unsafe_allow_html=True)
+    
+    pilihan_c = st.selectbox("Pilih Cabang Tempat Anda Bertugas:", ["Pusat", "Cabang 2", "Cabang 3"])
+    st.markdown("<br>", unsafe_allow_html=True)
+    if st.button("🚀 MASUK KE KASIR", type="primary", use_container_width=True):
+        st.session_state['cabang_terpilih'] = pilihan_c
+        st.rerun()
+    st.markdown('</div>', unsafe_allow_html=True)
+    st.stop() # Berhenti eksekusi kode di bawah jika belum login
+
+# --- SIDEBAR INFO CABANG ---
+st.sidebar.markdown(f"### 📍 Cabang Aktif:\n## <span style='color:#14B8A6;'>{st.session_state['cabang_terpilih']}</span>", unsafe_allow_html=True)
+st.sidebar.markdown("---")
+if st.sidebar.button("🔄 Ganti Cabang / Logout", use_container_width=True):
+    st.session_state['cabang_terpilih'] = None
+    # Bersihkan state yang berhubungan dengan cabang lama
+    if 'modal_cash' in st.session_state: del st.session_state['modal_cash']
+    if 'modal_digi' in st.session_state: del st.session_state['modal_digi']
+    st.session_state['keranjang_belanja'] = []
+    st.session_state['draf_scan_smart'] = []
+    st.rerun()
+
+# --- FUNGSI KONEKSI DATABASE BERDASARKAN CABANG ---
 @st.cache_resource
-def konek_gsheets():
+def konek_gsheets(nama_cabang):
     try:
         json_string = st.secrets["GOOGLE_JSON"].strip()
         kredensial = json.loads(json_string)
         gc = gspread.service_account_from_dict(kredensial)
         sh = gc.open("Database Kasir")
         
-        try: ws_t = sh.worksheet("Transaksi")
-        except: ws_t = sh.add_worksheet(title="Transaksi", rows=1000, cols=6)
+        # Buat nama worksheet spesifik untuk tiap cabang
+        s_tr = f"Transaksi_{nama_cabang}"
+        s_ks = f"Kas_Harian_{nama_cabang}"
+        s_st = f"Stok_{nama_cabang}"
+        
+        try: ws_t = sh.worksheet(s_tr)
+        except: ws_t = sh.add_worksheet(title=s_tr, rows=1000, cols=6)
             
-        try: ws_k = sh.worksheet("Kas_Harian")
-        except: ws_k = sh.add_worksheet(title="Kas_Harian", rows=1000, cols=5)
+        try: ws_k = sh.worksheet(s_ks)
+        except: ws_k = sh.add_worksheet(title=s_ks, rows=1000, cols=5)
 
-        try: ws_s = sh.worksheet("Stok")
-        except: ws_s = sh.add_worksheet(title="Stok", rows=1000, cols=7)
+        try: ws_s = sh.worksheet(s_st)
+        except: ws_s = sh.add_worksheet(title=s_st, rows=1000, cols=7)
             
         return sh, ws_t, ws_k, ws_s
     except: return None, None, None, None
 
-db, ws_t, ws_k, ws_s = konek_gsheets()
+db, ws_t, ws_k, ws_s = konek_gsheets(st.session_state['cabang_terpilih'])
 
 # --- FUNGSI BACA & UPDATE MODAL KE DATABASE ---
 def ambil_modal_terakhir():
@@ -209,9 +253,9 @@ def hitung_admin(nominal, jenis):
         else: return 35000 + (-(-(nominal - 10000000) // 5000000) * 5000)
 
 # --- HEADER CUSTOM UI ---
-st.markdown("""
+st.markdown(f"""
     <div class="rabay-header">
-        <h1>RABAY CELL</h1>
+        <h1>RABAY CELL - {st.session_state['cabang_terpilih'].upper()}</h1>
     </div>
 """, unsafe_allow_html=True)
 
@@ -379,7 +423,6 @@ with tab1:
                 """, unsafe_allow_html=True)
 
                 client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
-                # Menggunakan model gemini-3.5-flash-lite
                 res = client.models.generate_content(model='gemini-3.5-flash-lite', contents=[img_temp, "Tulis semua nominal transaksi beserta tandanya (+ atau -). Balas dengan format angka dipisah koma, contoh: +9067000,-75000,-5000000"])
                 
                 lens_placeholder.empty()
@@ -462,7 +505,7 @@ with tab1:
 
 # --- TAB 2: RIWAYAT ---
 with tab2:
-    st.subheader("📋 Daftar Riwayat Transaksi")
+    st.subheader(f"📋 Daftar Riwayat Transaksi - {st.session_state['cabang_terpilih']}")
     if ws_t:
         data_t = ws_t.get_all_values()
         if len(data_t) > 1:
@@ -490,10 +533,10 @@ with tab2:
             """, unsafe_allow_html=True)
             
             with st.expander("⚠️ Hapus Semua Riwayat Transaksi"):
-                st.warning("PERINGATAN: Seluruh data riwayat transaksi akan dihapus permanen!")
+                st.warning(f"PERINGATAN: Seluruh riwayat transaksi di cabang {st.session_state['cabang_terpilih']} akan dihapus!")
                 konfirm_hapus_semua = st.checkbox("Iya, saya yakin ingin menghapus semua riwayat", key="chk_del_all_trx")
                 if konfirm_hapus_semua:
-                    if st.button("🗑️ Hapus Permanen Semua Riwayat", type="primary"):
+                    if st.button("🗑️ Hapus Permanen", type="primary"):
                         ws_t.clear()
                         ws_t.append_row(data_t[0])
                         st.success("Semua riwayat berhasil dihapus!")
@@ -693,7 +736,7 @@ with tab4:
                 st.rerun()
 
     st.markdown("---")
-    st.subheader("📋 Daftar Stok Tersedia")
+    st.subheader(f"📋 Daftar Stok Tersedia - {st.session_state['cabang_terpilih']}")
     if ws_s:
         data_s = ws_s.get_all_values()
         if len(data_s) > 1:
