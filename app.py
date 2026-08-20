@@ -334,7 +334,6 @@ with tab1:
                             kategori = 'Tarik Tunai' if '+' in item else 'Bank'
                             tanda_simbol = '+' if '+' in item else '-'
                             processed_data.append({'Tanda': tanda_simbol, 'Jenis Otomatis': kategori, 'Nominal (Rp)': nom_val})
-                            # Inisialisasi state widget selectbox agar sinkron
                             st.session_state[f"ocr_jns_{idx}"] = kategori
                     st.session_state['draf_scan_smart'] = processed_data
             except Exception as e: st.error(f"Gagal scan: {e}")
@@ -349,7 +348,6 @@ with tab1:
                 for idx, item in enumerate(st.session_state['draf_scan_smart']):
                     if item['Tanda'] == '-':
                         item['Jenis Otomatis'] = mass_minus_choice
-                        # Perbarui state selectbox agar UI ikut berubah secara real-time
                         st.session_state[f"ocr_jns_{idx}"] = mass_minus_choice
                 st.success("Semua transaksi minus (-) berhasil diubah!")
                 st.rerun()
@@ -358,11 +356,12 @@ with tab1:
             indices_to_delete = []
             
             for i, item in enumerate(st.session_state['draf_scan_smart']):
-                col_h1, col_h2 = st.columns([5, 1])
+                # Tombol Hapus Kecil di Sebelah Kanan Teks Nominal
+                col_h1, col_h2 = st.columns([6, 1])
                 with col_h1:
                     st.markdown(f"**Trx #{i+1} ({item['Tanda']})** - {f_uang(item['Nominal (Rp)'])}")
                 with col_h2:
-                    if st.button("❌", key=f"del_ocr_{i}", help="Hapus item ini"):
+                    if st.button("❌", key=f"del_ocr_{i}", help="Hapus item"):
                         indices_to_delete.append(i)
                 
                 if item['Tanda'] == '+':
