@@ -125,20 +125,23 @@ def init_gsheets():
 
 sh_master = init_gsheets()
 
-# --- FUNGSI AMBIL KREDENSIAL AKUN MASTER DARI DATABASE ---
+# --- FUNGSI AMBIL KREDENSIAL AKUN MASTER DARI DATABASE (AMAN DARI KOSONG) ---
 def get_master_credentials(sh):
     if not sh: return "admin", "123", None
     try:
         ws_akun = sh.worksheet("Pengaturan_Akun")
     except:
         ws_akun = sh.add_worksheet(title="Pengaturan_Akun", rows=2, cols=2)
-        ws_akun.append_row(["Username", "Password"])
-        ws_akun.append_row(["admin", "123"]) # Akun bawaan pertama kali
         
     data = ws_akun.get_all_values()
-    if len(data) > 1:
+    if len(data) > 1 and len(data[1]) >= 2:
         return data[1][0], data[1][1], ws_akun
-    return "admin", "123", ws_akun
+    else:
+        # Jika sheet kosong, otomatis isi data default admin / 123
+        ws_akun.clear()
+        ws_akun.append_row(["Username", "Password"])
+        ws_akun.append_row(["admin", "123"])
+        return "admin", "123", ws_akun
 
 db_user, db_pass, ws_akun_master = get_master_credentials(sh_master)
 
@@ -153,7 +156,7 @@ if 'cabang_terpilih' not in st.session_state:
     if st.query_params.get("cabang"):
         st.session_state['cabang_terpilih'] = st.query_params.get("cabang")
     else:
-        st.session_state['cabang_terpilih'] = "Pusat" # Default Cabang
+        st.session_state['cabang_terpilih'] = "Pusat"
 
 # Tampilan Login Jika Belum Masuk
 if not st.session_state['is_logged_in']:
@@ -172,9 +175,9 @@ if not st.session_state['is_logged_in']:
             st.success("Akses Diterima!")
             st.rerun()
         else:
-            st.error("❌ Username atau Password salah!")
+            st.error("❌ Username atau Password salah! (Default: admin / 123)")
     st.markdown('</div>', unsafe_allow_html=True)
-    st.stop() # Hentikan eksekusi kode di bawah jika belum login
+    st.stop()
 
 # --- FUNGSI AMBIL DATABASE BERDASARKAN CABANG TERPILIH ---
 def get_branch_worksheets(sh, cabang):
@@ -190,7 +193,6 @@ def get_branch_worksheets(sh, cabang):
 
 ws_t, ws_k, ws_s = get_branch_worksheets(sh_master, st.session_state['cabang_terpilih'])
 
-# --- FUNGSI BACA & UPDATE MODAL ---
 def ambil_modal_terakhir():
     if ws_k:
         try:
@@ -199,7 +201,6 @@ def ambil_modal_terakhir():
         except: pass
     return 0, 0
 
-# --- INISIALISASI STATE TRANSAKSI ---
 if 'modal_cash' not in st.session_state or 'modal_digi' not in st.session_state:
     c_awal, d_awal = ambil_modal_terakhir()
     st.session_state['modal_cash'] = c_awal
@@ -579,7 +580,11 @@ with tab2:
                             st.rerun()
 
                 st.markdown("<hr style='margin:5px 0; border-color:#333;'>", unsafe_allow_html=True)
-        else: st.info("Belum ada riwayat transaksi.")
+        else: 
+            st.info("Belum ada riwayat transaksi.")
+            if len(data_t) == 0:
+                ws_t.append_row(["Waktu", "Jenis", "Nominal", "Admin", "Total", "Profit"])
+                st.rerun()
 
 # --- TAB 3: DASHBOARD ---
 with tab3:
@@ -807,6 +812,9 @@ with tab4:
                 st.markdown("<hr style='margin:5px 0; border-color:#333;'>", unsafe_allow_html=True)
         else:
             st.info("Belum ada data stok.")
+            if len(data_s) == 0:
+                ws_s.append_row(["Barcode", "Nama_Barang", "Stok", "Harga_Modal", "Harga_Jual", "Kode_Cepat", "Kategori"])
+                st.rerun()
 
 # --- TAB 5: SETELAN & AKUN ---
 with tab5:
@@ -818,7 +826,6 @@ with tab5:
     if st.button("✅ Terapkan Cabang", type="primary", use_container_width=True):
         st.session_state['cabang_terpilih'] = pilihan_pindah
         st.query_params["cabang"] = pilihan_pindah
-        # Hapus state spesifik cabang sebelumnya
         if 'modal_cash' in st.session_state: del st.session_state['modal_cash']
         if 'modal_digi' in st.session_state: del st.session_state['modal_digi']
         st.session_state['keranjang_belanja'] = []
@@ -828,7 +835,7 @@ with tab5:
 
     st.markdown("---")
     st.markdown("### 🔐 Pengaturan Akun Master")
-    st.info("Akun ini digunakan untuk mengontrol seluruh cabang. Hati-hati saat mengubahnya.")
+    st.info("Akun ini digunakan untuk mengontrol seluruh cabang.")
     
     with st.form("form_ubah_akun"):
         user_baru = st.text_input("Username Master Baru", value=db_user)
@@ -839,11 +846,11 @@ with tab5:
                 if ws_akun_master:
                     ws_akun_master.update_cell(2, 1, user_baru)
                     ws_akun_master.update_cell(2, 2, pass_baru)
-                    st.success("Username & Password berhasil diperbarui! Silakan catat baik-baik.")
+                    st.success("Username & Password berhasil diperbarui!")
                 else:
                     st.error("Gagal terhubung ke database setelan.")
             else:
-                st.error("Form tidak boleh ada yang kosong!")
+                st.error("Form tidak boleh kosong!")
 
     st.markdown("---")
     if st.button("🚪 Keluar / Logout Aplikasi", use_container_width=True):
