@@ -8,6 +8,8 @@ import gspread
 import json
 from datetime import datetime
 import pytz
+import io
+import base64
 
 # --- KONFIGURASI HALAMAN HARUS PALING ATAS ---
 st.set_page_config(page_title="RABAY CELL PRO", layout="centered", page_icon="🚀", initial_sidebar_state="collapsed")
@@ -371,23 +373,15 @@ with tab1:
 
     else: 
         sumber_gambar = st.file_uploader("Upload Screenshot Mutasi:", type=["jpg", "jpeg", "png"])
-        
-        if sumber_gambar:
-            # Tampilkan Preview Gambar Besar
-            st.markdown("<p style='color:#ccc; font-size:14px; margin-bottom:5px;'>Preview Screenshot:</p>", unsafe_allow_html=True)
-            st.image(sumber_gambar, use_container_width=True)
 
         if sumber_gambar and st.button("🔍 AI SCAN OTOMATIS (+/-)", use_container_width=True, type="primary"):
             try:
-                # Placeholder Animasi Google Lens
+                # Placeholder Animasi Google Lens (Tanpa st.image tambahan)
                 lens_placeholder = st.empty()
                 img_temp = Image.open(sumber_gambar)
                 
-                # Konversi gambar ke base64 untuk HTML/CSS Animasi Scanner
-                import io
                 buffered = io.BytesIO()
                 img_temp.save(buffered, format="JPEG")
-                import base64
                 img_str = base64.b64encode(buffered.getvalue()).decode()
 
                 lens_placeholder.markdown(f"""
@@ -401,7 +395,7 @@ with tab1:
                 client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
                 res = client.models.generate_content(model='gemini-3.6-flash', contents=[img_temp, "Tulis semua nominal transaksi beserta tandanya (+ atau -). Balas dengan format angka dipisah koma, contoh: +9067000,-75000,-5000000"])
                 
-                lens_placeholder.empty() # Hapus animasi setelah selesai
+                lens_placeholder.empty()
 
                 raw_text = res.text.replace(" ", "")
                 items = raw_text.split(',')
