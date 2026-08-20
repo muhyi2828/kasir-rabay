@@ -125,22 +125,19 @@ def init_gsheets():
 
 sh_master = init_gsheets()
 
-# --- FUNGSI AMBIL KREDENSIAL AKUN MASTER DARI DATABASE ---
+# --- FUNGSI AMBIL KREDENSIAL AKUN MASTER (SUPER AMAN TANPA ERROR ADD_WORKSHEET) ---
 def get_master_credentials(sh):
     if not sh: return "admin", "123", None
     try:
         ws_akun = sh.worksheet("Pengaturan_Akun")
+        data = ws_akun.get_all_values()
+        if len(data) > 0 and len(data[0]) >= 2:
+            return data[0][0], data[0][1], ws_akun
+        elif len(data) > 1 and len(data[1]) >= 2:
+            return data[1][0], data[1][1], ws_akun
     except:
-        ws_akun = sh.add_worksheet(title="Pengaturan_Akun", rows=2, cols=2)
-        
-    data = ws_akun.get_all_values()
-    if len(data) > 1 and len(data[1]) >= 2:
-        return data[1][0], data[1][1], ws_akun
-    else:
-        ws_akun.clear()
-        ws_akun.append_row(["Username", "Password"])
-        ws_akun.append_row(["admin", "123"])
-        return "admin", "123", ws_akun
+        pass
+    return "admin", "123", None
 
 db_user, db_pass, ws_akun_master = get_master_credentials(sh_master)
 
@@ -151,10 +148,7 @@ if 'is_logged_in' not in st.session_state:
     else:
         st.session_state['is_logged_in'] = False
 
-# Daftar Cabang (Tampilan Baru & Pemetaan ke Sheet Lama agar aman)
-# "RABAY01" -> membaca sheet "Pusat"
-# "Medang" -> membaca sheet "Cabang 2"
-# "G. BATU" -> membaca sheet "Cabang 3"
+# Pemetaan Cabang Tampilan ke Sheet Asli
 mapping_cabang = {
     "RABAY01": "Pusat",
     "Medang": "Cabang 2",
@@ -189,17 +183,19 @@ if not st.session_state['is_logged_in']:
     st.markdown('</div>', unsafe_allow_html=True)
     st.stop()
 
-# --- FUNGSI AMBIL DATABASE BERDASARKAN PEMETAAN SHEET LAMA ---
+# --- FUNGSI AMBIL DATABASE AMAN ---
 def get_branch_worksheets(sh, tampilan_cabang):
     if not sh: return None, None, None
     nama_sheet_asli = mapping_cabang.get(tampilan_cabang, "Pusat")
     s_tr, s_ks, s_st = f"Transaksi_{nama_sheet_asli}", f"Kas_Harian_{nama_sheet_asli}", f"Stok_{nama_sheet_asli}"
-    try: ws_t = sh.worksheet(s_tr)
-    except: ws_t = sh.add_worksheet(title=s_tr, rows=1000, cols=6)
-    try: ws_k = sh.worksheet(s_ks)
-    except: ws_k = sh.add_worksheet(title=s_ks, rows=1000, cols=5)
-    try: ws_s = sh.worksheet(s_st)
-    except: ws_s = sh.add_worksheet(title=s_st, rows=1000, cols=7)
+    
+    def get_safe(title):
+        try: return sh.worksheet(title)
+        except: return None
+
+    ws_t = get_safe(s_tr)
+    ws_k = get_safe(s_ks)
+    ws_s = get_safe(s_st)
     return ws_t, ws_k, ws_s
 
 ws_t, ws_k, ws_s = get_branch_worksheets(sh_master, st.session_state['cabang_terpilih'])
@@ -851,8 +847,8 @@ with tab5:
         if st.form_submit_button("Simpan Perubahan Akun"):
             if user_baru and pass_baru:
                 if ws_akun_master:
-                    ws_akun_master.update_cell(2, 1, user_baru)
-                    ws_akun_master.update_cell(2, 2, pass_baru)
+                    ws_akun_master.update_cell(1, 1, user_baru)
+                    ws_akun_master.update_cell(1, 2, pass_baru)
                     st.success("Username & Password berhasil diperbarui!")
                 else:
                     st.error("Gagal terhubung ke database setelan.")
