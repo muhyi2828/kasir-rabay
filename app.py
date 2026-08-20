@@ -125,37 +125,24 @@ def init_gsheets():
 
 sh_master = init_gsheets()
 
-# --- FUNGSI AMBIL KREDENSIAL AKUN MASTER & LIST CABANG DARI DATABASE ---
-def get_master_data(sh):
-    if not sh: return "admin", "123", ["RABAY01", "Medang", "G. BATU"], None
+# --- FUNGSI AMBIL KREDENSIAL AKUN MASTER DARI DATABASE ---
+def get_master_credentials(sh):
+    if not sh: return "admin", "123", None
     try:
         ws_akun = sh.worksheet("Pengaturan_Akun")
     except:
-        ws_akun = sh.add_worksheet(title="Pengaturan_Akun", rows=10, cols=3)
-        ws_akun.append_row(["Username", "Password", "Daftar_Cabang"])
-        ws_akun.append_row(["admin", "123", "RABAY01,Medang,G. BATU"])
+        ws_akun = sh.add_worksheet(title="Pengaturan_Akun", rows=2, cols=2)
         
     data = ws_akun.get_all_values()
-    username, password = "admin", "123"
-    cabang_list = ["RABAY01", "Medang", "G. BATU"]
-    
     if len(data) > 1 and len(data[1]) >= 2:
-        username = data[1][0]
-        password = data[1][1]
-        if len(data[1]) >= 3 and data[1][2].strip():
-            cabang_list = [c.strip() for c in data[1][2].split(",") if c.strip()]
+        return data[1][0], data[1][1], ws_akun
     else:
         ws_akun.clear()
-        ws_akun.append_row(["Username", "Password", "Daftar_Cabang"])
-        ws_akun.append_row(["admin", "123", "RABAY01,Medang,G. BATU"])
-        
-    return username, password, cabang_list, ws_akun
+        ws_akun.append_row(["Username", "Password"])
+        ws_akun.append_row(["admin", "123"])
+        return "admin", "123", ws_akun
 
-db_user, db_pass, daftar_cabang, ws_akun_master = get_master_data(sh_master)
-
-# Simpan daftar cabang ke session state supaya bisa diperbarui secara dinamis
-if 'daftar_cabang' not in st.session_state:
-    st.session_state['daftar_cabang'] = daftar_cabang
+db_user, db_pass, ws_akun_master = get_master_credentials(sh_master)
 
 # --- SISTEM LOGIN MASTER TAHAN REFRESH ---
 if 'is_logged_in' not in st.session_state:
@@ -164,11 +151,22 @@ if 'is_logged_in' not in st.session_state:
     else:
         st.session_state['is_logged_in'] = False
 
+# Daftar Cabang (Tampilan Baru & Pemetaan ke Sheet Lama agar aman)
+# "RABAY01" -> membaca sheet "Pusat"
+# "Medang" -> membaca sheet "Cabang 2"
+# "G. BATU" -> membaca sheet "Cabang 3"
+mapping_cabang = {
+    "RABAY01": "Pusat",
+    "Medang": "Cabang 2",
+    "G. BATU": "Cabang 3"
+}
+daftar_tampilan_cabang = list(mapping_cabang.keys())
+
 if 'cabang_terpilih' not in st.session_state:
-    if st.query_params.get("cabang") and st.query_params.get("cabang") in st.session_state['daftar_cabang']:
+    if st.query_params.get("cabang") and st.query_params.get("cabang") in daftar_tampilan_cabang:
         st.session_state['cabang_terpilih'] = st.query_params.get("cabang")
     else:
-        st.session_state['cabang_terpilih'] = st.session_state['daftar_cabang'][0]
+        st.session_state['cabang_terpilih'] = "RABAY01"
 
 # Tampilan Login Jika Belum Masuk
 if not st.session_state['is_logged_in']:
@@ -191,10 +189,11 @@ if not st.session_state['is_logged_in']:
     st.markdown('</div>', unsafe_allow_html=True)
     st.stop()
 
-# --- FUNGSI AMBIL DATABASE BERDASARKAN CABANG TERPILIH ---
-def get_branch_worksheets(sh, cabang):
+# --- FUNGSI AMBIL DATABASE BERDASARKAN PEMETAAN SHEET LAMA ---
+def get_branch_worksheets(sh, tampilan_cabang):
     if not sh: return None, None, None
-    s_tr, s_ks, s_st = f"Transaksi_{cabang}", f"Kas_Harian_{cabang}", f"Stok_{cabang}"
+    nama_sheet_asli = mapping_cabang.get(tampilan_cabang, "Pusat")
+    s_tr, s_ks, s_st = f"Transaksi_{nama_sheet_asli}", f"Kas_Harian_{nama_sheet_asli}", f"Stok_{nama_sheet_asli}"
     try: ws_t = sh.worksheet(s_tr)
     except: ws_t = sh.add_worksheet(title=s_tr, rows=1000, cols=6)
     try: ws_k = sh.worksheet(s_ks)
@@ -828,8 +827,8 @@ with tab4:
 
 # --- TAB 5: SETELAN & AKUN ---
 with tab5:
-    idx_cabang_aktif = st.session_state['daftar_cabang'].index(st.session_state['cabang_terpilih']) if st.session_state['cabang_terpilih'] in st.session_state['daftar_cabang'] else 0
-    pilihan_pindah = st.selectbox("Ganti Akses Cabang Ke:", st.session_state['daftar_cabang'], index=idx_cabang_aktif)
+    idx_cabang_aktif = daftar_tampilan_cabang.index(st.session_state['cabang_terpilih']) if st.session_state['cabang_terpilih'] in daftar_tampilan_cabang else 0
+    pilihan_pindah = st.selectbox("Ganti Akses Cabang Ke:", daftar_tampilan_cabang, index=idx_cabang_aktif)
     
     if st.button("PINDAH CABANG", type="primary", use_container_width=True):
         st.session_state['cabang_terpilih'] = pilihan_pindah
@@ -840,25 +839,6 @@ with tab5:
         st.session_state['draf_scan_smart'] = []
         st.success(f"Berhasil pindah akses ke {pilihan_pindah}!")
         st.rerun()
-
-    st.markdown("---")
-    st.markdown("### ➕ Tambah Cabang Baru")
-    with st.form("form_tambah_cabang"):
-        nama_cabang_baru = st.text_input("Nama Cabang Baru (Contoh: Cabang 4)")
-        if st.form_submit_button("TAMBAH CABANG BARU"):
-            cabang_bersih = nama_cabang_baru.strip()
-            if cabang_bersih:
-                if cabang_bersih not in st.session_state['daftar_cabang']:
-                    st.session_state['daftar_cabang'].append(cabang_bersih)
-                    gabungan_str = ",".join(st.session_state['daftar_cabang'])
-                    if ws_akun_master:
-                        ws_akun_master.update_cell(2, 3, gabungan_str)
-                    st.success(f"Cabang '{cabang_bersih}' berhasil ditambahkan!")
-                    st.rerun()
-                else:
-                    st.error("Nama cabang tersebut sudah ada!")
-            else:
-                st.error("Nama cabang tidak boleh kosong!")
 
     st.markdown("---")
     st.markdown("### 🔐 Pengaturan Akun Master")
