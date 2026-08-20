@@ -165,19 +165,6 @@ def ambil_modal_terakhir():
         except: pass
     return 0, 0
 
-def update_kas_db():
-    if ws_k:
-        try:
-            data_k = ws_k.get_all_values()
-            if len(data_k) > 1:
-                last_row = len(data_k)
-                ws_k.update_cell(last_row, 2, st.session_state['modal_cash'])
-                ws_k.update_cell(last_row, 3, st.session_state['modal_digi'])
-            else:
-                waktu = datetime.now(pytz.timezone('Asia/Jakarta')).strftime("%Y-%m-%d %H:%M:%S")
-                ws_k.append_row([waktu, st.session_state['modal_cash'], st.session_state['modal_digi']])
-        except: pass
-
 # --- INISIALISASI STATE ---
 if 'modal_cash' not in st.session_state or 'modal_digi' not in st.session_state:
     c_awal, d_awal = ambil_modal_terakhir()
@@ -392,8 +379,8 @@ with tab1:
                 """, unsafe_allow_html=True)
 
                 client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
-                # Menggunakan gemini-2.5-flash agar kompatibel
-                res = client.models.generate_content(model='gemini-2.5-flash', contents=[img_temp, "Tulis semua nominal transaksi beserta tandanya (+ atau -). Balas dengan format angka dipisah koma, contoh: +9067000,-75000,-5000000"])
+                # Menggunakan model resmi rekomendasi sistem: gemini-3.6-flash
+                res = client.models.generate_content(model='gemini-3.6-flash', contents=[img_temp, "Tulis semua nominal transaksi beserta tandanya (+ atau -). Balas dengan format angka dipisah koma, contoh: +9067000,-75000,-5000000"])
                 
                 lens_placeholder.empty()
 
