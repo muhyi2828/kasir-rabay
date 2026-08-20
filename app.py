@@ -125,7 +125,7 @@ def init_gsheets():
 
 sh_master = init_gsheets()
 
-# --- FUNGSI AMBIL KREDENSIAL AKUN MASTER (SUPER AMAN TANPA ERROR ADD_WORKSHEET) ---
+# --- FUNGSI AMBIL KREDENSIAL AKUN MASTER ---
 def get_master_credentials(sh):
     if not sh: return "admin", "123", None
     try:
@@ -148,7 +148,6 @@ if 'is_logged_in' not in st.session_state:
     else:
         st.session_state['is_logged_in'] = False
 
-# Pemetaan Cabang Tampilan ke Sheet Asli
 mapping_cabang = {
     "RABAY01": "Pusat",
     "Medang": "Cabang 2",
@@ -552,22 +551,12 @@ with tab2:
                 col_btn1, col_btn2 = st.columns(2)
                 with col_btn1:
                     if st.button("❌ Hapus", key=f"del_trx_{b_num}", use_container_width=True):
-                        st.session_state[f"konfirm_trx_{b_num}"] = True
+                        ws_t.delete_rows(b_num)
+                        st.success("Berhasil dihapus!")
+                        st.rerun()
                 with col_btn2:
                     if st.button("✏️ Edit", key=f"edit_trx_{b_num}", use_container_width=True):
                         st.session_state[f"mode_edit_trx_{b_num}"] = True
-                
-                if st.session_state.get(f"konfirm_trx_{b_num}", False):
-                    st.error(f"Yakin ingin menghapus baris {b_num}?")
-                    c_y, c_n = st.columns(2)
-                    if c_y.button("Ya, Hapus!", key=f"y_trx_{b_num}", type="primary"):
-                        ws_t.delete_rows(b_num)
-                        st.success("Berhasil dihapus!")
-                        st.session_state[f"konfirm_trx_{b_num}"] = False
-                        st.rerun()
-                    if c_n.button("Batal", key=f"n_trx_{b_num}"):
-                        st.session_state[f"konfirm_trx_{b_num}"] = False
-                        st.rerun()
 
                 if st.session_state.get(f"mode_edit_trx_{b_num}", False):
                     with st.form(key=f"form_edit_trx_{b_num}"):
