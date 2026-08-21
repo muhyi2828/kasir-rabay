@@ -182,19 +182,26 @@ if not st.session_state['is_logged_in']:
     st.markdown('</div>', unsafe_allow_html=True)
     st.stop()
 
-# --- FUNGSI AMBIL DATABASE AMAN ---
+# --- FUNGSI AMBIL DATABASE DENGAN PEMBUATAN SHEET OTOMATIS AMAN ---
 def get_branch_worksheets(sh, tampilan_cabang):
     if not sh: return None, None, None
     nama_sheet_asli = mapping_cabang.get(tampilan_cabang, "Pusat")
     s_tr, s_ks, s_st = f"Transaksi_{nama_sheet_asli}", f"Kas_Harian_{nama_sheet_asli}", f"Stok_{nama_sheet_asli}"
     
-    def get_safe(title):
-        try: return sh.worksheet(title)
-        except: return None
+    def get_or_create(title, headers):
+        try:
+            return sh.worksheet(title)
+        except:
+            try:
+                ws = sh.add_worksheet(title=title, rows=1000, len(headers))
+                ws.append_row(headers)
+                return ws
+            except:
+                return None
 
-    ws_t = get_safe(s_tr)
-    ws_k = get_safe(s_ks)
-    ws_s = get_safe(s_st)
+    ws_t = get_or_create(s_tr, ["Waktu", "Jenis", "Nominal", "Admin", "Total", "Profit"])
+    ws_k = get_or_create(s_ks, ["Waktu", "Cash", "Digital"])
+    ws_s = get_or_create(s_st, ["Barcode", "Nama_Barang", "Stok", "Harga_Modal", "Harga_Jual", "Kode_Cepat", "Kategori"])
     return ws_t, ws_k, ws_s
 
 ws_t, ws_k, ws_s = get_branch_worksheets(sh_master, st.session_state['cabang_terpilih'])
