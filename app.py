@@ -193,7 +193,7 @@ def get_branch_worksheets(sh, tampilan_cabang):
             return sh.worksheet(title)
         except:
             try:
-                ws = sh.add_worksheet(title=title, rows=1000, len(headers))
+                ws = sh.add_worksheet(title=title, rows=1000, cols=len(headers))
                 ws.append_row(headers)
                 return ws
             except:
