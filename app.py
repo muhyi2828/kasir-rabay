@@ -151,13 +151,14 @@ ws_t, ws_k, ws_s, ws_sesi = get_branch_worksheets(sh_master, st.session_state['c
 # --- CACHE DATA (5 DETIK TTL) ---
 @st.cache_data(ttl=5)
 def fetch_data_from_sheet(_ws, sheet_name, branch):
-    if not _ws: return []
+    if not _ws: return None # Berubah dari [] menjadi None untuk deteksi error
     for _ in range(3):
         try:
-            return _ws.get_all_values()
-        except:
-            time.sleep(0.5)
-    return []
+            data = _ws.get_all_values()
+            return data if data else []
+        except Exception:
+            time.sleep(1)
+    return None # Jika 3 kali gagal, kembalikan None agar sistem tidak mengira database kosong
 
 def clean_row_data(data_list):
     cleaned = []
@@ -181,9 +182,14 @@ def safe_update(ws, cell_range, data):
     cleaned_data = [clean_row_data(row) for row in data]
     for _ in range(3):
         try:
-            ws.update(cell_range, cleaned_data)
+            # Memastikan kompatibilitas untuk semua versi library gspread
+            try:
+                ws.update(values=cleaned_data, range_name=cell_range)
+            except TypeError:
+                ws.update(cell_range, cleaned_data)
             return True
-        except: time.sleep(1)
+        except Exception: 
+            time.sleep(1)
     return False
 
 def safe_update_cell(ws, row, col, val):
@@ -205,12 +211,17 @@ def safe_delete(ws, row_idx):
         except: time.sleep(1)
     return False
 
-# AMBIL DATA
+# AMBIL DATA DENGAN SISTEM PENGAMANAN BARU
 with st.spinner("⏳ Sinkronisasi Database..."):
     data_t = fetch_data_from_sheet(ws_t, "Transaksi", st.session_state['cabang_terpilih'])
     data_s = fetch_data_from_sheet(ws_s, "Stok", st.session_state['cabang_terpilih'])
     data_k = fetch_data_from_sheet(ws_k, "Kas", st.session_state['cabang_terpilih'])
     data_sesi = fetch_data_from_sheet(ws_sesi, "Sesi", st.session_state['cabang_terpilih'])
+
+# Jika salah satu data = None (artinya gagal load dari server Google), blokir aplikasi agar tidak merusak data.
+if data_t is None or data_s is None or data_k is None or data_sesi is None:
+    st.error("⚠️ Gagal terhubung ke server Google Sheets. Trafik mungkin sedang penuh. Silakan muat ulang (refresh) halaman ini.")
+    st.stop()
 
 # CARI SESI VALID SECARA PRESISI
 def load_valid_session(data_kas):
@@ -278,7 +289,6 @@ st.markdown(f"""
 tab1, tab2, tab3, tab4, tab5 = st.tabs(["TRANSAKSI", "RIWAYAT", "DASHBOARD", "STOK BARANG", "⚙️ SETELAN"])
 
 with tab1:
-    # PERIKSA VALIDASI MODAL AWAL
     modal_belum_diisi = (st.session_state['modal_cash'] == 0 and st.session_state['modal_digi'] == 0)
     
     if modal_belum_diisi:
@@ -897,8 +907,10 @@ with tab4:
         rows_stok = data_s[1:]
         normalized_rows = []
         for r in rows_stok:
-            while len(r) < 7: r.append("Umum")
-            normalized_rows.append(r)
+            # Cegah mutasi cache pada sistem baru
+            new_r = list(r)
+            while len(new_r) < 7: new_r.append("Umum")
+            normalized_rows.append(new_r)
             
         df_s = pd.DataFrame(normalized_rows, columns=['Barcode', 'Nama_Barang', 'Stok', 'Harga_Modal', 'Harga_Jual', 'Kode_Cepat', 'Kategori'])
         df_s['No_Baris'] = range(2, len(df_s) + 2)
@@ -970,9 +982,9 @@ with tab4:
                         else: st.error("Gagal perbarui stok!")
 
             st.markdown("<hr style='margin:5px 0; border-color:#333;'>", unsafe_allow_html=True)
-    else:
+    elif data_s is not None:
         st.info("Belum ada data stok.")
-        if ws_s and data_s is not None and len(data_s) == 0:
+        if ws_s and len(data_s) == 0:
             safe_append(ws_s, ["Barcode", "Nama_Barang", "Stok", "Harga_Modal", "Harga_Jual", "Kode_Cepat", "Kategori"])
             st.cache_data.clear()
             st.rerun()
