@@ -608,8 +608,7 @@ with tab3:
         st.warning("⚠️ Apakah Anda yakin ingin mengakhiri sesi ini? Semua kalkulasi kas dan profit sesi ini akan ditutup dan diarsipkan.")
         col_ks1, col_ks2 = st.columns(2)
         if col_ks1.button("✅ Ya, Tutup Sesi", type="primary", use_container_width=True):
-            # Hitung kalkulasi akhir sesi sebelum direset
-            tot_cash_ s = 0
+            tot_cash_s = 0
             tot_digi_s = 0
             prof_s = 0
             if ws_t:
@@ -627,7 +626,7 @@ with tab3:
                             nom = float(r.iloc[2]) if str(r.iloc[2]).replace('.','',1).isdigit() else 0
                             tot = float(r.iloc[4]) if str(r.iloc[4]).replace('.','',1).isdigit() else 0
                             if jns in ["Penjualan Barang", "Transaksi Lainnya"]:
-                                tot_cash_ s += tot
+                                tot_cash_s += tot
                             elif jns == "Tarik Tunai":
                                 tot_cash_s -= tot
                                 tot_digi_s += nom
@@ -639,11 +638,9 @@ with tab3:
             akhir_d = st.session_state['modal_digi'] + tot_digi_s + st.session_state['penyesuaian_digi']
             waktu_tutup = datetime.now(pytz.timezone('Asia/Jakarta')).strftime("%Y-%m-%d %H:%M:%S")
 
-            # Simpan arsip sesi ke database
             if ws_sesi:
                 ws_sesi.append_row([waktu_tutup, st.session_state['modal_cash'], st.session_state['modal_digi'], akhir_c, akhir_d, prof_s])
 
-            # Reset State Sesi
             st.session_state['modal_cash'] = 0
             st.session_state['modal_digi'] = 0
             st.session_state['penyesuaian_cash'] = 0
@@ -770,7 +767,6 @@ with tab3:
         if len(data_sesi_all) > 1:
             df_riwayat_sesi = pd.DataFrame(data_sesi_all[1:], columns=data_sesi_all[0])
             
-            # Format tampilan uang pada tabel riwayat sesi
             df_sesi_display = df_riwayat_sesi.copy()
             for col in ['Modal_Cash', 'Modal_Digital', 'Total_Cash_Akhir', 'Total_Digital_Akhir', 'Total_Profit']:
                 if col in df_sesi_display.columns:
