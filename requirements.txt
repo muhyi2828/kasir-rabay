@@ -5,3 +5,4 @@ gspread
 pytz
 pandas
 plotly
+pip install supabase
