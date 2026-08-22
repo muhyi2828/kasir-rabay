@@ -215,46 +215,87 @@ def get_branch_worksheets(sh, tampilan_cabang):
 
 ws_t, ws_k, ws_s, ws_sesi = get_branch_worksheets(sh_master, st.session_state['cabang_terpilih'])
 
-def ambil_data_stok(ws):
-    if not ws: return []
-    try:
-        return ws.get_all_values()
-    except:
-        time.sleep(1)
-        try: return ws.get_all_values()
-        except: return []
-
-def ambil_data_transaksi(ws):
-    if not ws: return []
-    try:
-        return ws.get_all_values()
-    except:
-        time.sleep(1)
-        try: return ws.get_all_values()
-        except: return []
-
-# --- CARI MODAL & WAKTU SESI AKTIF TERAKHIR YANG VALID (>0) ---
-def load_valid_session():
-    waktu_default = datetime.now(pytz.timezone('Asia/Jakarta')).strftime("%Y-%m-%d %H:%M:%S")
-    if ws_k:
+# --- SISTEM CACHE PINTAR & AUTO RETRY ANTI-LIMIT API ---
+@st.cache_data(ttl=5) # Ambil data maks 1x setiap 5 detik agar tidak limit
+def fetch_data_from_sheet(_ws, sheet_name, branch):
+    if not _ws: return None
+    for i in range(3):
         try:
-            data_k = ws_k.get_all_values()
-            if len(data_k) > 1:
-                # Telusuri dari bawah ke atas untuk mencari modal terakhir yang tidak nol (jika ada)
-                for row in reversed(data_k[1:]):
-                    if len(row) >= 3:
-                        c_val = int(row[1]) if str(row[1]).isdigit() else 0
-                        d_val = int(row[2]) if str(row[2]).isdigit() else 0
-                        if c_val > 0 or d_val > 0:
-                            return row[0], c_val, d_val
-                # Jika semua 0, ambil baris paling bawah atau baris pertama setelah header
-                baris_terakhir = data_k[-1]
-                return baris_terakhir[0], int(baris_terakhir[1]) if str(baris_terakhir[1]).isdigit() else 0, int(baris_terakhir[2]) if str(baris_terakhir[2]).isdigit() else 0
+            return _ws.get_all_values()
+        except Exception:
+            time.sleep(0.5)
+    return None # Jika 3x gagal, kembalikan None (Bukan array kosong)
+
+# --- FUNGSI AMAN UNTUK MENYIMPAN / MENGUBAH DATA (WRITE) ---
+def safe_append(ws, data):
+    if not ws: return False
+    for i in range(3):
+        try:
+            ws.append_row(data)
+            return True
         except:
-            pass
+            time.sleep(1)
+    return False
+
+def safe_update(ws, cell_range, data):
+    if not ws: return False
+    for i in range(3):
+        try:
+            ws.update(cell_range, data)
+            return True
+        except:
+            time.sleep(1)
+    return False
+
+def safe_update_cell(ws, row, col, val):
+    if not ws: return False
+    for i in range(3):
+        try:
+            ws.update_cell(row, col, val)
+            return True
+        except:
+            time.sleep(1)
+    return False
+
+def safe_delete(ws, row_idx):
+    if not ws: return False
+    for i in range(3):
+        try:
+            ws.delete_rows(row_idx)
+            return True
+        except:
+            time.sleep(1)
+    return False
+
+# --- TARIK SEMUA DATA DI AWAL HALAMAN (HANYA 1X TARIK) ---
+with st.spinner("⏳ Sinkronisasi Database..."):
+    data_t = fetch_data_from_sheet(ws_t, "Transaksi", st.session_state['cabang_terpilih'])
+    data_s = fetch_data_from_sheet(ws_s, "Stok", st.session_state['cabang_terpilih'])
+    data_k = fetch_data_from_sheet(ws_k, "Kas", st.session_state['cabang_terpilih'])
+    data_sesi = fetch_data_from_sheet(ws_sesi, "Sesi", st.session_state['cabang_terpilih'])
+
+# Hentikan proses jika gagal menarik data agar tidak terjadi Error 0 
+if data_t is None or data_s is None or data_k is None or data_sesi is None:
+    st.error("⚠️ **GAGAL TERHUBUNG KE DATABASE KARENA SERVER SIBUK.**\n\nSilakan refresh / muat ulang halaman. (Sistem sengaja menghentikan proses agar nominal modal Anda tidak tereset ke 0).")
+    st.stop()
+
+# --- CARI MODAL & WAKTU SESI AKTIF DARI CACHE ---
+def load_valid_session(data_kas):
+    waktu_default = datetime.now(pytz.timezone('Asia/Jakarta')).strftime("%Y-%m-%d %H:%M:%S")
+    if data_kas and len(data_kas) > 1:
+        # Cari dari baris terbawah ke atas
+        for row in reversed(data_kas[1:]):
+            if len(row) >= 3:
+                c_val = int(row[1]) if str(row[1]).isdigit() else 0
+                d_val = int(row[2]) if str(row[2]).isdigit() else 0
+                if c_val > 0 or d_val > 0:
+                    return row[0], c_val, d_val
+        # Jika benar-benar kosong/nol semua
+        baris_terakhir = data_kas[-1]
+        return baris_terakhir[0], int(baris_terakhir[1]) if str(baris_terakhir[1]).isdigit() else 0, int(baris_terakhir[2]) if str(baris_terakhir[2]).isdigit() else 0
     return waktu_default, 0, 0
 
-waktu_mulai_db, modal_cash_db, modal_digi_db = load_valid_session()
+waktu_mulai_db, modal_cash_db, modal_digi_db = load_valid_session(data_k)
 
 if 'waktu_mulai_sesi' not in st.session_state:
     st.session_state['waktu_mulai_sesi'] = waktu_mulai_db
@@ -326,24 +367,22 @@ with tab1:
 
         if quick:
             code = quick.upper().strip()
-            if ws_s:
-                stok_data = ambil_data_stok(ws_s)
-                if len(stok_data) > 1:
-                    df_s_check = pd.DataFrame(stok_data[1:])
-                    df_s_check['Row_Idx'] = range(2, len(df_s_check) + 2)
+            if len(data_s) > 1:
+                df_s_check = pd.DataFrame(data_s[1:])
+                df_s_check['Row_Idx'] = range(2, len(df_s_check) + 2)
+                
+                match_barang = df_s_check[(df_s_check[5].str.upper() == code) | (df_s_check[0].str.upper() == code)]
+                if not match_barang.empty:
+                    namabarang = match_barang.iloc[0][1]
+                    hargamodal = int(match_barang.iloc[0][3])
+                    hargajual = int(match_barang.iloc[0][4])
                     
-                    match_barang = df_s_check[(df_s_check[5].str.upper() == code) | (df_s_check[0].str.upper() == code)]
-                    if not match_barang.empty:
-                        namabarang = match_barang.iloc[0][1]
-                        hargamodal = int(match_barang.iloc[0][3])
-                        hargajual = int(match_barang.iloc[0][4])
-                        
-                        profit_item = hargajual - hargamodal
-                        nama_brg_det = namabarang
-                        row_brg_det = int(match_barang.iloc[0]['Row_Idx'])
-                        profit_brg_det = profit_item
-                        jenis_trx_manual = "Penjualan Barang"
-                        nominal_val = hargajual
+                    profit_item = hargajual - hargamodal
+                    nama_brg_det = namabarang
+                    row_brg_det = int(match_barang.iloc[0]['Row_Idx'])
+                    profit_brg_det = profit_item
+                    jenis_trx_manual = "Penjualan Barang"
+                    nominal_val = hargajual
 
             if code.startswith("TF") or code.startswith("EW") or code.startswith("TK"):
                 jenis_trx_manual = "E-Wallet" if code.startswith("EW") else "Tarik Tunai" if code.startswith("TK") else "Bank"
@@ -402,13 +441,20 @@ with tab1:
             with col_b1:
                 if st.button("💾 SIMPAN LANGSUNG", type="primary", use_container_width=True):
                     waktu = datetime.now(pytz.timezone('Asia/Jakarta')).strftime("%Y-%m-%d %H:%M:%S")
-                    if jenis_terpilih == "Penjualan Barang" and ws_s and row_brg_det:
-                        stok_skrg = int(ws_s.cell(row_brg_det, 3).value)
-                        if stok_skrg > 0: ws_s.update_cell(row_brg_det, 3, stok_skrg - 1)
                     
-                    if ws_t: ws_t.append_row([waktu, jenis_terpilih, nominal_trx, admin, total_uang, profit_bersih])
-                    st.success("Tersimpan!")
-                    st.rerun()
+                    # Update Stok tanpa tarik data ulang API (Baca via cache list)
+                    if jenis_terpilih == "Penjualan Barang" and ws_s and row_brg_det:
+                        stok_skrg = int(data_s[row_brg_det - 1][2]) if str(data_s[row_brg_det - 1][2]).isdigit() else 0
+                        if stok_skrg > 0: 
+                            safe_update_cell(ws_s, row_brg_det, 3, stok_skrg - 1)
+                    
+                    if safe_append(ws_t, [waktu, jenis_terpilih, nominal_trx, admin, total_uang, profit_bersih]):
+                        st.cache_data.clear() # BERSIHKAN CACHE SETELAH UPDATE
+                        st.success("Tersimpan!")
+                        time.sleep(0.5)
+                        st.rerun()
+                    else:
+                        st.error("Gagal menyimpan ke server, silakan coba lagi.")
 
             with col_b2:
                 if st.button("🛒 MASUK KERANJANG", use_container_width=True):
@@ -435,16 +481,26 @@ with tab1:
             c_k1, c_k2 = st.columns(2)
             if c_k1.button("🚀 PROSES SEMUA", type="primary", use_container_width=True):
                 waktu = datetime.now(pytz.timezone('Asia/Jakarta')).strftime("%Y-%m-%d %H:%M:%S")
+                berhasil = True
                 for item in st.session_state['keranjang_belanja']:
                     j_trx, nom_trx, adm_trx, tot_trx, r_stok = item['Jenis'], item['Nominal'], item['Admin/Profit'], item['Total'], item['Row_Stok']
+                    
                     if j_trx == "Penjualan Barang" and ws_s and r_stok:
-                        stok_skrg = int(ws_s.cell(r_stok, 3).value)
-                        if stok_skrg > 0: ws_s.update_cell(r_stok, 3, stok_skrg - 1)
+                        stok_skrg = int(data_s[r_stok - 1][2]) if str(data_s[r_stok - 1][2]).isdigit() else 0
+                        if stok_skrg > 0: 
+                            safe_update_cell(ws_s, r_stok, 3, stok_skrg - 1)
                         
-                    if ws_t: ws_t.append_row([waktu, j_trx, nom_trx, adm_trx, tot_trx, adm_trx])
-                st.session_state['keranjang_belanja'] = []
-                st.success("Selesai!")
-                st.rerun()
+                    if not safe_append(ws_t, [waktu, j_trx, nom_trx, adm_trx, tot_trx, adm_trx]):
+                        berhasil = False
+                
+                if berhasil:
+                    st.session_state['keranjang_belanja'] = []
+                    st.cache_data.clear()
+                    st.success("Semua keranjang selesai diproses!")
+                    time.sleep(0.5)
+                    st.rerun()
+                else:
+                    st.error("Sebagian data gagal disimpan!")
                 
             if c_k2.button("🗑️ KOSONGKAN", use_container_width=True):
                 st.session_state['keranjang_belanja'] = []
@@ -538,103 +594,119 @@ with tab1:
             st.markdown('<div class="floating-container">', unsafe_allow_html=True)
             if st.button("💾 SIMPAN SEMUA TRANSAKSI OCR", type="primary", use_container_width=True):
                 waktu = datetime.now(pytz.timezone('Asia/Jakarta')).strftime("%Y-%m-%d %H:%M:%S")
+                berhasil = True
                 for i, item in enumerate(st.session_state['draf_scan_smart']):
                     jenis = "Tarik Tunai" if item['Tanda'] == '+' else st.session_state.get(f"ocr_jns_{i}", item['Jenis Otomatis'])
                     nom = item['Nominal (Rp)']
                     admin = hitung_admin(nom, jenis)
                     total = nom - admin if jenis == "Tarik Tunai" else nom + admin
                     profit_ocr = admin
-                    if ws_t: ws_t.append_row([waktu, jenis, nom, admin, total, profit_ocr])
+                    if not safe_append(ws_t, [waktu, jenis, nom, admin, total, profit_ocr]):
+                        berhasil = False
                     
-                st.session_state['draf_scan_smart'] = []
-                st.success("Semua transaksi berhasil disimpan!")
-                st.rerun()
+                if berhasil:
+                    st.session_state['draf_scan_smart'] = []
+                    st.cache_data.clear()
+                    st.success("Semua transaksi berhasil disimpan!")
+                    time.sleep(0.5)
+                    st.rerun()
+                else:
+                    st.error("Sebagian data gagal disimpan!")
             st.markdown('</div>', unsafe_allow_html=True)
 
 # --- TAB 2: RIWAYAT ---
 with tab2:
-    if ws_t:
-        data_t = ambil_data_transaksi(ws_t)
-        if len(data_t) > 1:
-            df_t = pd.DataFrame(data_t[1:], columns=data_t[0])
-            df_t['No_Baris'] = range(2, len(df_t) + 2)
-            df_t['Tanggal_Saja'] = pd.to_datetime(df_t.iloc[:, 0], errors='coerce').dt.date
-            
-            col_f1, col_f2 = st.columns(2)
-            with col_f1:
-                kolom_jenis = df_t.columns[1] if len(df_t.columns) > 1 else 'Jenis'
-                pilih_filter_jenis = st.selectbox("Jenis:", options=["Semua"] + df_t[kolom_jenis].unique().tolist(), key="filter_j_trx")
-            with col_f2:
-                pilih_filter_tgl = st.selectbox("Tanggal:", options=["Semua Tanggal"] + [str(t) for t in sorted(df_t['Tanggal_Saja'].dropna().unique(), reverse=True)], key="filter_t_trx")
-            
-            df_t_filtered = df_t.copy()
-            if pilih_filter_jenis != "Semua": df_t_filtered = df_t_filtered[df_t_filtered[kolom_jenis] == pilih_filter_jenis]
-            if pilih_filter_tgl != "Semua Tanggal": df_t_filtered = df_t_filtered[df_t_filtered['Tanggal_Saja'].astype(str) == pilih_filter_tgl]
-            
-            profit_filter_val = pd.to_numeric(df_t_filtered.iloc[:, 5], errors='coerce').fillna(0).sum() if len(df_t_filtered) > 0 else 0
-            st.markdown(f"""
-                <div style="background-color:#1E1E1E; padding:12px; border-radius:8px; border:1px solid #2ca02c; text-align:center; margin:15px 0;">
-                    <span style="color:#2ca02c; font-size:14px; font-weight:bold;">🔥 TOTAL PROFIT (FILTER AKTIF):</span><br>
-                    <span style="color:#fff; font-size:20px; font-weight:bold;">{f_uang(profit_filter_val)}</span>
-                </div>
-            """, unsafe_allow_html=True)
-            
-            with st.expander("⚠️ Hapus Semua Riwayat Transaksi"):
-                st.warning(f"PERINGATAN: Seluruh riwayat transaksi di cabang {st.session_state['cabang_terpilih']} akan dihapus!")
-                konfirm_hapus_semua = st.checkbox("Iya, saya yakin ingin menghapus semua riwayat", key="chk_del_all_trx")
-                if konfirm_hapus_semua:
-                    if st.button("🗑️ Hapus Permanen", type="primary"):
+    if data_t and len(data_t) > 1:
+        df_t = pd.DataFrame(data_t[1:], columns=data_t[0])
+        df_t['No_Baris'] = range(2, len(df_t) + 2)
+        df_t['Tanggal_Saja'] = pd.to_datetime(df_t.iloc[:, 0], errors='coerce').dt.date
+        
+        col_f1, col_f2 = st.columns(2)
+        with col_f1:
+            kolom_jenis = df_t.columns[1] if len(df_t.columns) > 1 else 'Jenis'
+            pilih_filter_jenis = st.selectbox("Jenis:", options=["Semua"] + df_t[kolom_jenis].unique().tolist(), key="filter_j_trx")
+        with col_f2:
+            pilih_filter_tgl = st.selectbox("Tanggal:", options=["Semua Tanggal"] + [str(t) for t in sorted(df_t['Tanggal_Saja'].dropna().unique(), reverse=True)], key="filter_t_trx")
+        
+        df_t_filtered = df_t.copy()
+        if pilih_filter_jenis != "Semua": df_t_filtered = df_t_filtered[df_t_filtered[kolom_jenis] == pilih_filter_jenis]
+        if pilih_filter_tgl != "Semua Tanggal": df_t_filtered = df_t_filtered[df_t_filtered['Tanggal_Saja'].astype(str) == pilih_filter_tgl]
+        
+        profit_filter_val = pd.to_numeric(df_t_filtered.iloc[:, 5], errors='coerce').fillna(0).sum() if len(df_t_filtered) > 0 else 0
+        st.markdown(f"""
+            <div style="background-color:#1E1E1E; padding:12px; border-radius:8px; border:1px solid #2ca02c; text-align:center; margin:15px 0;">
+                <span style="color:#2ca02c; font-size:14px; font-weight:bold;">🔥 TOTAL PROFIT (FILTER AKTIF):</span><br>
+                <span style="color:#fff; font-size:20px; font-weight:bold;">{f_uang(profit_filter_val)}</span>
+            </div>
+        """, unsafe_allow_html=True)
+        
+        with st.expander("⚠️ Hapus Semua Riwayat Transaksi"):
+            st.warning(f"PERINGATAN: Seluruh riwayat transaksi di cabang {st.session_state['cabang_terpilih']} akan dihapus!")
+            konfirm_hapus_semua = st.checkbox("Iya, saya yakin ingin menghapus semua riwayat", key="chk_del_all_trx")
+            if konfirm_hapus_semua:
+                if st.button("🗑️ Hapus Permanen", type="primary"):
+                    try:
                         ws_t.clear()
                         ws_t.append_row(data_t[0])
+                        st.cache_data.clear()
                         st.success("Semua riwayat berhasil dihapus!")
+                        time.sleep(0.5)
                         st.rerun()
+                    except:
+                        st.error("Gagal menghapus! Coba lagi.")
 
-            st.markdown("---")
-            for index, row in df_t_filtered.iterrows():
-                b_num = int(row['No_Baris'])
-                waktu_trx = row.iloc[0]
-                jns_trx = row.iloc[1]
-                nom_trx = f_uang(row.iloc[2]) if str(row.iloc[2]).isdigit() else row.iloc[2]
-                tot_trx = f_uang(row.iloc[4]) if str(row.iloc[4]).isdigit() else row.iloc[4]
-                
-                st.markdown(f"**{waktu_trx}** | <span style='color:#14B8A6;'>{jns_trx}</span><br>Nominal: {nom_trx} | Total: {tot_trx}", unsafe_allow_html=True)
-                
-                col_btn1, col_btn2 = st.columns(2)
-                with col_btn1:
-                    if st.button("❌ Hapus", key=f"del_trx_{b_num}", use_container_width=True):
-                        ws_t.delete_rows(b_num)
+        st.markdown("---")
+        for index, row in df_t_filtered.iterrows():
+            b_num = int(row['No_Baris'])
+            waktu_trx = row.iloc[0]
+            jns_trx = row.iloc[1]
+            nom_trx = f_uang(row.iloc[2]) if str(row.iloc[2]).isdigit() else row.iloc[2]
+            tot_trx = f_uang(row.iloc[4]) if str(row.iloc[4]).isdigit() else row.iloc[4]
+            
+            st.markdown(f"**{waktu_trx}** | <span style='color:#14B8A6;'>{jns_trx}</span><br>Nominal: {nom_trx} | Total: {tot_trx}", unsafe_allow_html=True)
+            
+            col_btn1, col_btn2 = st.columns(2)
+            with col_btn1:
+                if st.button("❌ Hapus", key=f"del_trx_{b_num}", use_container_width=True):
+                    if safe_delete(ws_t, b_num):
+                        st.cache_data.clear()
                         st.success("Berhasil dihapus!")
+                        time.sleep(0.5)
                         st.rerun()
-                with col_btn2:
-                    if st.button("✏️ Edit", key=f"edit_trx_{b_num}", use_container_width=True):
-                        st.session_state[f"mode_edit_trx_{b_num}"] = True
+                    else: st.error("Gagal hapus!")
+            with col_btn2:
+                if st.button("✏️ Edit", key=f"edit_trx_{b_num}", use_container_width=True):
+                    st.session_state[f"mode_edit_trx_{b_num}"] = True
 
-                if st.session_state.get(f"mode_edit_trx_{b_num}", False):
-                    with st.form(key=f"form_edit_trx_{b_num}"):
-                        st.write(f"Edit Transaksi Baris {b_num}")
-                        e_waktu = st.text_input("Waktu", value=row.iloc[0])
-                        e_jenis = st.text_input("Jenis", value=row.iloc[1])
-                        e_nom = st.number_input("Nominal", value=int(row.iloc[2]) if str(row.iloc[2]).isdigit() else 0, step=1000)
-                        e_adm = st.number_input("Admin", value=int(row.iloc[3]) if str(row.iloc[3]).isdigit() else 0, step=1000)
-                        e_tot = st.number_input("Total", value=int(row.iloc[4]) if str(row.iloc[4]).isdigit() else 0, step=1000)
-                        e_prof = st.number_input("Profit", value=int(row.iloc[5]) if str(row.iloc[5]).isdigit() else 0, step=1000)
-                        
-                        if st.form_submit_button("Simpan Perubahan"):
-                            ws_t.update(f"A{b_num}:F{b_num}", [[e_waktu, e_jenis, e_nom, e_adm, e_tot, e_prof]])
+            if st.session_state.get(f"mode_edit_trx_{b_num}", False):
+                with st.form(key=f"form_edit_trx_{b_num}"):
+                    st.write(f"Edit Transaksi Baris {b_num}")
+                    e_waktu = st.text_input("Waktu", value=row.iloc[0])
+                    e_jenis = st.text_input("Jenis", value=row.iloc[1])
+                    e_nom = st.number_input("Nominal", value=int(row.iloc[2]) if str(row.iloc[2]).isdigit() else 0, step=1000)
+                    e_adm = st.number_input("Admin", value=int(row.iloc[3]) if str(row.iloc[3]).isdigit() else 0, step=1000)
+                    e_tot = st.number_input("Total", value=int(row.iloc[4]) if str(row.iloc[4]).isdigit() else 0, step=1000)
+                    e_prof = st.number_input("Profit", value=int(row.iloc[5]) if str(row.iloc[5]).isdigit() else 0, step=1000)
+                    
+                    if st.form_submit_button("Simpan Perubahan"):
+                        if safe_update(ws_t, f"A{b_num}:F{b_num}", [[e_waktu, e_jenis, e_nom, e_adm, e_tot, e_prof]]):
                             st.session_state[f"mode_edit_trx_{b_num}"] = False
+                            st.cache_data.clear()
                             st.success("Perubahan disimpan!")
+                            time.sleep(0.5)
                             st.rerun()
+                        else: st.error("Gagal update!")
 
-                st.markdown("<hr style='margin:5px 0; border-color:#333;'>", unsafe_allow_html=True)
-        else: 
-            st.info("Belum ada riwayat transaksi.")
-            if len(data_t) == 0:
-                ws_t.append_row(["Waktu", "Jenis", "Nominal", "Admin", "Total", "Profit"])
-                st.rerun()
+            st.markdown("<hr style='margin:5px 0; border-color:#333;'>", unsafe_allow_html=True)
+    else: 
+        st.info("Belum ada riwayat transaksi.")
+        if ws_t and data_t is not None and len(data_t) == 0:
+            safe_append(ws_t, ["Waktu", "Jenis", "Nominal", "Admin", "Total", "Profit"])
+            st.cache_data.clear()
+            st.rerun()
 
 # --- TAB 3: DASHBOARD ---
 with tab3:
-    # --- TOMBOL AKHIRI SESI DI PALING ATAS DASHBOARD ---
     st.markdown("""
         <div style="background-color: #1E1E1E; padding: 20px; border-radius: 12px; border: 2px solid #ff4b4b; text-align: center; margin-bottom: 25px;">
             <h3 style="color: #ff4b4b; margin-top: 0;">🔴 MANAJEMEN SESI SHIFT</h3>
@@ -653,53 +725,49 @@ with tab3:
             tot_digi_s = 0
             prof_s = 0
             
-            if ws_t:
-                data_t_all = ambil_data_transaksi(ws_t)
-                if len(data_t_all) > 1:
-                    df_t_all = pd.DataFrame(data_t_all[1:])
-                    df_t_all['Waktu_Parsed'] = pd.to_datetime(df_t_all.iloc[:, 0], errors='coerce')
-                    t_mulai = pd.to_datetime(st.session_state['waktu_mulai_sesi'])
-                    df_sesi_ini = df_t_all[df_t_all['Waktu_Parsed'] >= t_mulai].copy()
-                    
-                    if not df_sesi_ini.empty:
-                        prof_s = pd.to_numeric(df_sesi_ini.iloc[:, 5], errors='coerce').fillna(0).sum()
-                        for idx, r in df_sesi_ini.iterrows():
-                            jns = r.iloc[1]
-                            nom = float(r.iloc[2]) if str(r.iloc[2]).replace('.','',1).isdigit() else 0
-                            tot = float(r.iloc[4]) if str(r.iloc[4]).replace('.','',1).isdigit() else 0
-                            if jns in ["Penjualan Barang", "Transaksi Lainnya"]:
-                                tot_cash_s += tot
-                            elif jns == "Tarik Tunai":
-                                tot_cash_s -= tot
-                                tot_digi_s += nom
-                            else: 
-                                tot_digi_s -= nom
-                                tot_cash_s += tot
+            if data_t and len(data_t) > 1:
+                df_t_all = pd.DataFrame(data_t[1:])
+                df_t_all['Waktu_Parsed'] = pd.to_datetime(df_t_all.iloc[:, 0], errors='coerce')
+                t_mulai = pd.to_datetime(st.session_state['waktu_mulai_sesi'])
+                df_sesi_ini = df_t_all[df_t_all['Waktu_Parsed'] >= t_mulai].copy()
+                
+                if not df_sesi_ini.empty:
+                    prof_s = pd.to_numeric(df_sesi_ini.iloc[:, 5], errors='coerce').fillna(0).sum()
+                    for idx, r in df_sesi_ini.iterrows():
+                        jns = r.iloc[1]
+                        nom = float(r.iloc[2]) if str(r.iloc[2]).replace('.','',1).isdigit() else 0
+                        tot = float(r.iloc[4]) if str(r.iloc[4]).replace('.','',1).isdigit() else 0
+                        if jns in ["Penjualan Barang", "Transaksi Lainnya"]:
+                            tot_cash_s += tot
+                        elif jns == "Tarik Tunai":
+                            tot_cash_s -= tot
+                            tot_digi_s += nom
+                        else: 
+                            tot_digi_s -= nom
+                            tot_cash_s += tot
 
             akhir_c = st.session_state['modal_cash'] + tot_cash_s + st.session_state['penyesuaian_cash']
             akhir_d = st.session_state['modal_digi'] + tot_digi_s + st.session_state['penyesuaian_digi']
             waktu_tutup = datetime.now(pytz.timezone('Asia/Jakarta')).strftime("%Y-%m-%d %H:%M:%S")
 
-            if ws_sesi:
-                try:
-                    ws_sesi.append_row([waktu_tutup, st.session_state['modal_cash'], st.session_state['modal_digi'], akhir_c, akhir_d, prof_s])
-                except:
-                    pass
+            # Simpan Arsip & Reset Kas (Aman)
+            berhasil_sesi = safe_append(ws_sesi, [waktu_tutup, st.session_state['modal_cash'], st.session_state['modal_digi'], akhir_c, akhir_d, prof_s])
+            berhasil_kas = safe_append(ws_k, [waktu_tutup, 0, 0])
 
-            if ws_k:
-                try:
-                    ws_k.append_row([waktu_tutup, 0, 0])
-                except:
-                    pass
-
-            st.session_state['modal_cash'] = 0
-            st.session_state['modal_digi'] = 0
-            st.session_state['penyesuaian_cash'] = 0
-            st.session_state['penyesuaian_digi'] = 0
-            st.session_state['waktu_mulai_sesi'] = waktu_tutup
-            st.session_state['konfirmasi_tutup_sesi'] = False
-            st.success("🎉 Sesi Berhasil Diakhiri & Diarsipkan!")
-            st.rerun()
+            if berhasil_sesi and berhasil_kas:
+                st.session_state['modal_cash'] = 0
+                st.session_state['modal_digi'] = 0
+                st.session_state['penyesuaian_cash'] = 0
+                st.session_state['penyesuaian_digi'] = 0
+                st.session_state['waktu_mulai_sesi'] = waktu_tutup
+                st.session_state['konfirmasi_tutup_sesi'] = False
+                
+                st.cache_data.clear() # WAJIB agar riwayat diperbarui
+                st.success("🎉 Sesi Berhasil Diakhiri & Diarsipkan!")
+                time.sleep(1)
+                st.rerun()
+            else:
+                st.error("❌ Gagal menyimpan sesi ke server! Coba beberapa detik lagi.")
 
         if col_ks2.button("❌ Batal", use_container_width=True):
             st.session_state['konfirmasi_tutup_sesi'] = False
@@ -715,12 +783,16 @@ with tab3:
         if input_digi_baru > 0: st.caption(f"👀 Terbaca: **{f_uang(input_digi_baru)}**")
             
         if st.button("💾 Simpan Modal Sesi", type="primary", use_container_width=True):
-            st.session_state['modal_cash'] = input_cash_baru
-            st.session_state['modal_digi'] = input_digi_baru
             waktu = datetime.now(pytz.timezone('Asia/Jakarta')).strftime("%Y-%m-%d %H:%M:%S")
-            if ws_k: ws_k.append_row([waktu, input_cash_baru, input_digi_baru]) 
-            st.success("Modal awal sesi diperbarui!")
-            st.rerun()
+            if safe_append(ws_k, [waktu, input_cash_baru, input_digi_baru]):
+                st.session_state['modal_cash'] = input_cash_baru
+                st.session_state['modal_digi'] = input_digi_baru
+                st.cache_data.clear()
+                st.success("Modal awal sesi diperbarui!")
+                time.sleep(0.5)
+                st.rerun()
+            else:
+                st.error("Gagal update modal!")
 
     st.markdown("---")
 
@@ -728,38 +800,30 @@ with tab3:
     tot_transaksi_digi = 0
     profit_sesi_ini = 0
     
-    if ws_t:
-        data_t = ambil_data_transaksi(ws_t)
-        if len(data_t) > 1:
-            df_trx = pd.DataFrame(data_t[1:])
-            if len(df_trx.columns) >= 6:
-                df_trx['Waktu_Parsed'] = pd.to_datetime(df_trx.iloc[:, 0], errors='coerce')
-                t_mulai_sesi = pd.to_datetime(st.session_state['waktu_mulai_sesi'])
-                
-                # SINKRONISASI MUTLAK: Hitung transaksi sejak waktu mulai sesi aktif, 
-                # atau jika waktu mulai sesi lebih baru dari transaksi, hitung transaksi pada hari yang sama
-                df_sesi = df_trx[df_trx['Waktu_Parsed'] >= t_mulai_sesi].copy()
-                if df_sesi.empty and not df_trx.empty:
-                    # Fallback aman: ambil transaksi hari ini agar dashboard selalu sinkron dengan riwayat harian
-                    today_str = datetime.now(pytz.timezone('Asia/Jakarta')).strftime("%Y-%m-%d")
-                    df_trx['Tgl_Saja'] = df_trx['Waktu_Parsed'].dt.strftime('%Y-%m-%d')
-                    df_sesi = df_trx[df_trx['Tgl_Saja'] == today_str].copy()
-
-                if not df_sesi.empty:
-                    profit_sesi_ini = pd.to_numeric(df_sesi.iloc[:, 5], errors='coerce').fillna(0).sum()
-                    for idx, r in df_sesi.iterrows():
-                        jns = r.iloc[1]
-                        nom = float(r.iloc[2]) if str(r.iloc[2]).replace('.','',1).isdigit() else 0
-                        tot = float(r.iloc[4]) if str(r.iloc[4]).replace('.','',1).isdigit() else 0
-                        
-                        if jns in ["Penjualan Barang", "Transaksi Lainnya"]:
-                            tot_transaksi_cash += tot
-                        elif jns == "Tarik Tunai":
-                            tot_transaksi_cash -= tot
-                            tot_transaksi_digi += nom
-                        else: 
-                            tot_transaksi_digi -= nom
-                            tot_transaksi_cash += tot
+    if data_t and len(data_t) > 1:
+        df_trx = pd.DataFrame(data_t[1:])
+        if len(df_trx.columns) >= 6:
+            df_trx['Waktu_Parsed'] = pd.to_datetime(df_trx.iloc[:, 0], errors='coerce')
+            t_mulai_sesi = pd.to_datetime(st.session_state['waktu_mulai_sesi'])
+            
+            # SINKRONISASI MUTLAK: Ambil transaksi berdasarkan waktu sesi terakhir
+            df_sesi = df_trx[df_trx['Waktu_Parsed'] >= t_mulai_sesi].copy()
+            
+            if not df_sesi.empty:
+                profit_sesi_ini = pd.to_numeric(df_sesi.iloc[:, 5], errors='coerce').fillna(0).sum()
+                for idx, r in df_sesi.iterrows():
+                    jns = r.iloc[1]
+                    nom = float(r.iloc[2]) if str(r.iloc[2]).replace('.','',1).isdigit() else 0
+                    tot = float(r.iloc[4]) if str(r.iloc[4]).replace('.','',1).isdigit() else 0
+                    
+                    if jns in ["Penjualan Barang", "Transaksi Lainnya"]:
+                        tot_transaksi_cash += tot
+                    elif jns == "Tarik Tunai":
+                        tot_transaksi_cash -= tot
+                        tot_transaksi_digi += nom
+                    else: 
+                        tot_transaksi_digi -= nom
+                        tot_transaksi_cash += tot
 
     total_cash_sistem = st.session_state['modal_cash'] + tot_transaksi_cash
     total_digi_sistem = st.session_state['modal_digi'] + tot_transaksi_digi
@@ -808,7 +872,7 @@ with tab3:
     """, unsafe_allow_html=True)
     
     st.markdown("### 📈 Grafik Profit Berdasarkan Sesi")
-    if ws_t and len(data_t) > 1:
+    if data_t and len(data_t) > 1:
         df_trx_all = pd.DataFrame(data_t[1:])
         if len(df_trx_all.columns) >= 6:
             df_trx_all['Tanggal'] = pd.to_datetime(df_trx_all.iloc[:, 0], errors='coerce').dt.strftime('%Y-%m-%d')
@@ -822,32 +886,24 @@ with tab3:
     st.markdown("---")
     st.markdown("### 📜 Riwayat Sesi Kerja Sebelumnya")
     
-    if ws_sesi:
-        try:
-            data_sesi_all = ws_sesi.get_all_values()
-            if len(data_sesi_all) > 1:
-                df_riwayat_sesi = pd.DataFrame(data_sesi_all[1:], columns=data_sesi_all[0])
-                
-                df_sesi_display = df_riwayat_sesi.copy()
-                for col in ['Modal_Cash', 'Modal_Digital', 'Total_Cash_Akhir', 'Total_Digital_Akhir', 'Total_Profit']:
-                    if col in df_sesi_display.columns:
-                        df_sesi_display[col] = df_sesi_display[col].apply(lambda x: f_uang(x) if str(x).isdigit() else x)
-                
-                st.dataframe(df_sesi_display, use_container_width=True, hide_index=True)
-            else:
-                st.info("Belum ada riwayat sesi yang ditutup.")
-        except:
-            st.info("Belum ada riwayat sesi yang ditutup.")
+    if data_sesi and len(data_sesi) > 1:
+        df_riwayat_sesi = pd.DataFrame(data_sesi[1:], columns=data_sesi[0])
+        df_sesi_display = df_riwayat_sesi.copy()
+        for col in ['Modal_Cash', 'Modal_Digital', 'Total_Cash_Akhir', 'Total_Digital_Akhir', 'Total_Profit']:
+            if col in df_sesi_display.columns:
+                df_sesi_display[col] = df_sesi_display[col].apply(lambda x: f_uang(x) if str(x).isdigit() else x)
+        
+        st.dataframe(df_sesi_display, use_container_width=True, hide_index=True)
+    else:
+        st.info("Belum ada riwayat sesi yang ditutup.")
 
 # --- TAB 4: STOK BARANG ---
 with tab4:
     existing_categories = ["Perdana", "Voucher", "Aksesoris", "Umum"]
-    if ws_s:
-        data_s_raw = ambil_data_stok(ws_s)
-        if len(data_s_raw) > 1:
-            for r in data_s_raw[1:]:
-                if len(r) > 6 and r[6] and r[6] not in existing_categories:
-                    existing_categories.append(r[6])
+    if data_s and len(data_s) > 1:
+        for r in data_s[1:]:
+            if len(r) > 6 and r[6] and r[6] not in existing_categories:
+                existing_categories.append(r[6])
 
     with st.expander("➕ Tambah Barang Baru"):
         barcode_input = st.text_input("Nomor Barcode / Label:")
@@ -873,95 +929,103 @@ with tab4:
         
         if st.button("💾 Simpan Barang", type="primary", use_container_width=True):
             final_kat = kategori_barang if kategori_barang.strip() else "Umum"
-            if ws_s and nama_barang:
-                ws_s.append_row([barcode_input, nama_barang, stok_awal, harga_modal, harga_jual, kode_cepat_brg, final_kat])
-                st.success("Tersimpan!")
-                st.rerun()
+            if nama_barang:
+                if safe_append(ws_s, [barcode_input, nama_barang, stok_awal, harga_modal, harga_jual, kode_cepat_brg, final_kat]):
+                    st.cache_data.clear()
+                    st.success("Tersimpan!")
+                    time.sleep(0.5)
+                    st.rerun()
+                else: st.error("Gagal simpan barang!")
 
     st.markdown("---")
-    if ws_s:
-        data_s = ambil_data_stok(ws_s)
-        if len(data_s) > 1:
-            rows_stok = data_s[1:]
-            normalized_rows = []
-            for r in rows_stok:
-                while len(r) < 7:
-                    r.append("Umum")
-                normalized_rows.append(r)
-                
-            df_s = pd.DataFrame(normalized_rows, columns=['Barcode', 'Nama_Barang', 'Stok', 'Harga_Modal', 'Harga_Jual', 'Kode_Cepat', 'Kategori'])
-            df_s['No_Baris'] = range(2, len(df_s) + 2)
-
-            list_kategori_filter = ["Semua Kategori"] + sorted(df_s['Kategori'].dropna().unique().tolist())
-            pilih_filter_kat = st.selectbox("Filter Berdasarkan Kategori:", options=list_kategori_filter)
+    if data_s and len(data_s) > 1:
+        rows_stok = data_s[1:]
+        normalized_rows = []
+        for r in rows_stok:
+            while len(r) < 7:
+                r.append("Umum")
+            normalized_rows.append(r)
             
-            df_s_filtered = df_s.copy()
-            if pilih_filter_kat != "Semua Kategori":
-                df_s_filtered = df_s_filtered[df_s_filtered['Kategori'] == pilih_filter_kat]
+        df_s = pd.DataFrame(normalized_rows, columns=['Barcode', 'Nama_Barang', 'Stok', 'Harga_Modal', 'Harga_Jual', 'Kode_Cepat', 'Kategori'])
+        df_s['No_Baris'] = range(2, len(df_s) + 2)
 
-            st.markdown("---")
-            for index, row in df_s_filtered.iterrows():
-                b_stok = int(row['No_Baris'])
-                bc = row['Barcode']
-                nm = row['Nama_Barang']
-                stk = row['Stok']
-                h_modal = f_uang(row['Harga_Modal']) if str(row['Harga_Modal']).isdigit() else row['Harga_Modal']
-                h_jual = f_uang(row['Harga_Jual']) if str(row['Harga_Jual']).isdigit() else row['Harga_Jual']
-                kat = row['Kategori'] if row['Kategori'] else "Umum"
-                
-                st.markdown(f"**{nm}** | <span style='color:#14B8A6;'>[{kat}]</span> (Stok: {stk})<br>Modal: {h_modal} | Jual: {h_jual}<br>Barcode: {bc}", unsafe_allow_html=True)
-                
-                col_stk1, col_stk2 = st.columns(2)
-                with col_stk1:
-                    if st.button("❌ Hapus", key=f"del_stk_{b_stok}", use_container_width=True):
-                        st.session_state[f"konfirm_stk_{b_stok}"] = True
-                with col_stk2:
-                    if st.button("✏️ Edit", key=f"edit_stok_btn_{b_stok}", use_container_width=True):
-                        st.session_state[f"mode_edit_stk_{b_stok}"] = True
-                
-                if st.session_state.get(f"konfirm_stk_{b_stok}", False):
-                    st.error(f"Yakin ingin menghapus {nm}?")
-                    cs_y, cs_n = st.columns(2)
-                    if cs_y.button("Ya, Hapus Stok!", key=f"y_stk_{b_stok}", type="primary"):
-                        ws_s.delete_rows(b_stok)
+        list_kategori_filter = ["Semua Kategori"] + sorted(df_s['Kategori'].dropna().unique().tolist())
+        pilih_filter_kat = st.selectbox("Filter Berdasarkan Kategori:", options=list_kategori_filter)
+        
+        df_s_filtered = df_s.copy()
+        if pilih_filter_kat != "Semua Kategori":
+            df_s_filtered = df_s_filtered[df_s_filtered['Kategori'] == pilih_filter_kat]
+
+        st.markdown("---")
+        for index, row in df_s_filtered.iterrows():
+            b_stok = int(row['No_Baris'])
+            bc = row['Barcode']
+            nm = row['Nama_Barang']
+            stk = row['Stok']
+            h_modal = f_uang(row['Harga_Modal']) if str(row['Harga_Modal']).isdigit() else row['Harga_Modal']
+            h_jual = f_uang(row['Harga_Jual']) if str(row['Harga_Jual']).isdigit() else row['Harga_Jual']
+            kat = row['Kategori'] if row['Kategori'] else "Umum"
+            
+            st.markdown(f"**{nm}** | <span style='color:#14B8A6;'>[{kat}]</span> (Stok: {stk})<br>Modal: {h_modal} | Jual: {h_jual}<br>Barcode: {bc}", unsafe_allow_html=True)
+            
+            col_stk1, col_stk2 = st.columns(2)
+            with col_stk1:
+                if st.button("❌ Hapus", key=f"del_stk_{b_stok}", use_container_width=True):
+                    st.session_state[f"konfirm_stk_{b_stok}"] = True
+            with col_stk2:
+                if st.button("✏️ Edit", key=f"edit_stok_btn_{b_stok}", use_container_width=True):
+                    st.session_state[f"mode_edit_stk_{b_stok}"] = True
+            
+            if st.session_state.get(f"konfirm_stk_{b_stok}", False):
+                st.error(f"Yakin ingin menghapus {nm}?")
+                cs_y, cs_n = st.columns(2)
+                if cs_y.button("Ya, Hapus Stok!", key=f"y_stk_{b_stok}", type="primary"):
+                    if safe_delete(ws_s, b_stok):
+                        st.cache_data.clear()
                         st.success("Stok dihapus!")
                         st.session_state[f"konfirm_stk_{b_stok}"] = False
+                        time.sleep(0.5)
                         st.rerun()
-                    if cs_n.button("Batal", key=f"n_stk_{b_stok}"):
-                        st.session_state[f"konfirm_stk_{b_stok}"] = False
-                        st.rerun()
+                    else: st.error("Gagal hapus stok!")
+                if cs_n.button("Batal", key=f"n_stk_{b_stok}"):
+                    st.session_state[f"konfirm_stk_{b_stok}"] = False
+                    st.rerun()
 
-                if st.session_state.get(f"mode_edit_stk_{b_stok}", False):
-                    with st.form(key=f"form_edit_stok_{b_stok}"):
-                        st.write(f"Edit Data: {nm}")
-                        es_bc = st.text_input("Barcode", value=bc)
-                        es_nm = st.text_input("Nama Barang", value=nm)
-                        es_stk = st.number_input("Stok", value=int(stk) if str(stk).isdigit() else 0, step=1)
-                        es_mod = st.number_input("Harga Modal", value=int(row['Harga_Modal']) if str(row['Harga_Modal']).isdigit() else 0, step=1000)
-                        es_jul = st.number_input("Harga Jual", value=int(row['Harga_Jual']) if str(row['Harga_Jual']).isdigit() else 0, step=1000)
-                        es_kod = st.text_input("Kode Cepat", value=row['Kode_Cepat'])
-                        
-                        opsi_kat_edit = existing_categories + ["+ Buat Kategori Baru..."]
-                        default_kat_idx = opsi_kat_edit.index(kat) if kat in opsi_kat_edit else 0
-                        es_pilih_kat = st.selectbox("Kategori Barang", options=opsi_kat_edit, index=default_kat_idx)
-                        if es_pilih_kat == "+ Buat Kategori Baru...":
-                            es_kat = st.text_input("Ketik Kategori Baru", value="", key=f"input_kat_baru_edit_{b_stok}")
-                        else:
-                            es_kat = es_pilih_kat
-                        
-                        if st.form_submit_button("Simpan Perubahan Stok"):
-                            final_es_kat = es_kat if es_kat.strip() else kat
-                            ws_s.update(f"A{b_stok}:G{b_stok}", [[es_bc, es_nm, es_stk, es_mod, es_jul, es_kod, final_es_kat]])
+            if st.session_state.get(f"mode_edit_stk_{b_stok}", False):
+                with st.form(key=f"form_edit_stok_{b_stok}"):
+                    st.write(f"Edit Data: {nm}")
+                    es_bc = st.text_input("Barcode", value=bc)
+                    es_nm = st.text_input("Nama Barang", value=nm)
+                    es_stk = st.number_input("Stok", value=int(stk) if str(stk).isdigit() else 0, step=1)
+                    es_mod = st.number_input("Harga Modal", value=int(row['Harga_Modal']) if str(row['Harga_Modal']).isdigit() else 0, step=1000)
+                    es_jul = st.number_input("Harga Jual", value=int(row['Harga_Jual']) if str(row['Harga_Jual']).isdigit() else 0, step=1000)
+                    es_kod = st.text_input("Kode Cepat", value=row['Kode_Cepat'])
+                    
+                    opsi_kat_edit = existing_categories + ["+ Buat Kategori Baru..."]
+                    default_kat_idx = opsi_kat_edit.index(kat) if kat in opsi_kat_edit else 0
+                    es_pilih_kat = st.selectbox("Kategori Barang", options=opsi_kat_edit, index=default_kat_idx)
+                    if es_pilih_kat == "+ Buat Kategori Baru...":
+                        es_kat = st.text_input("Ketik Kategori Baru", value="", key=f"input_kat_baru_edit_{b_stok}")
+                    else:
+                        es_kat = es_pilih_kat
+                    
+                    if st.form_submit_button("Simpan Perubahan Stok"):
+                        final_es_kat = es_kat if es_kat.strip() else kat
+                        if safe_update(ws_s, f"A{b_stok}:G{b_stok}", [[es_bc, es_nm, es_stk, es_mod, es_jul, es_kod, final_es_kat]]):
                             st.session_state[f"mode_edit_stk_{b_stok}"] = False
+                            st.cache_data.clear()
                             st.success("Stok diperbarui!")
+                            time.sleep(0.5)
                             st.rerun()
+                        else: st.error("Gagal perbarui stok!")
 
-                st.markdown("<hr style='margin:5px 0; border-color:#333;'>", unsafe_allow_html=True)
-        else:
-            st.info("Belum ada data stok.")
-            if len(data_s) == 0:
-                ws_s.append_row(["Barcode", "Nama_Barang", "Stok", "Harga_Modal", "Harga_Jual", "Kode_Cepat", "Kategori"])
-                st.rerun()
+            st.markdown("<hr style='margin:5px 0; border-color:#333;'>", unsafe_allow_html=True)
+    else:
+        st.info("Belum ada data stok.")
+        if ws_s and data_s is not None and len(data_s) == 0:
+            safe_append(ws_s, ["Barcode", "Nama_Barang", "Stok", "Harga_Modal", "Harga_Jual", "Kode_Cepat", "Kategori"])
+            st.cache_data.clear()
+            st.rerun()
 
 # --- TAB 5: SETELAN & AKUN ---
 with tab5:
@@ -975,6 +1039,7 @@ with tab5:
         if 'modal_digi' in st.session_state: del st.session_state['modal_digi']
         st.session_state['keranjang_belanja'] = []
         st.session_state['draf_scan_smart'] = []
+        st.cache_data.clear() # Bersihkan agar muat cabang baru dengan benar
         st.success(f"Berhasil pindah akses ke {pilihan_pindah}!")
         st.rerun()
 
@@ -1002,4 +1067,5 @@ with tab5:
         st.session_state['is_logged_in'] = False
         if "auth" in st.query_params: del st.query_params["auth"]
         if "cabang" in st.query_params: del st.query_params["cabang"]
+        st.cache_data.clear()
         st.rerun()
