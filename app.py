@@ -10,6 +10,7 @@ from datetime import datetime
 import pytz
 import io
 import base64
+import time
 
 # --- KONFIGURASI HALAMAN HARUS PALING ATAS ---
 st.set_page_config(page_title="RABAY CELL PRO", layout="centered", page_icon="🚀", initial_sidebar_state="collapsed")
@@ -182,22 +183,29 @@ if not st.session_state['is_logged_in']:
     st.markdown('</div>', unsafe_allow_html=True)
     st.stop()
 
-# --- FUNGSI AMBIL DATABASE DENGAN PEMBUATAN SHEET OTOMATIS AMAN ---
+# --- FUNGSI AMBIL DATABASE DENGAN PROTEKSI API LIMIT & AUTO-CREATE AMAN ---
 def get_branch_worksheets(sh, tampilan_cabang):
     if not sh: return None, None, None, None
     nama_sheet_asli = mapping_cabang.get(tampilan_cabang, "Pusat")
-    s_tr, s_ks, s_st, s_sesi = f"Transaksi_{nama_sheet_asli}", f"Kas_Harian_{nama_sheet_asli}", f"Stok_{nama_sheet_asli}", f"RiwayatSesi_{nama_sheet_asli}"
+    s_tr = f"Transaksi_{nama_sheet_asli}"
+    s_ks = f"Kas_Harian_{nama_sheet_asli}"
+    s_st = f"Stok_{nama_sheet_asli}"
+    s_sesi = f"RiwayatSesi_{nama_sheet_asli}"
     
     def get_or_create(title, headers):
         try:
             return sh.worksheet(title)
         except:
             try:
+                time.sleep(1) # Jeda waktu agar terhindar dari limit Google API
                 ws = sh.add_worksheet(title=title, rows=1000, cols=len(headers))
                 ws.append_row(headers)
                 return ws
             except:
-                return None
+                try:
+                    return sh.worksheet(title) # Coba ambil lagi jika sudah terlanjur terbuat
+                except:
+                    return None
 
     ws_t = get_or_create(s_tr, ["Waktu", "Jenis", "Nominal", "Admin", "Total", "Profit"])
     ws_k = get_or_create(s_ks, ["Waktu", "Cash", "Digital"])
