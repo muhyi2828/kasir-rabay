@@ -166,16 +166,23 @@ if data_t is None or data_s is None or data_k is None or data_sesi is None:
     st.error("⚠️ Gagal terhubung ke Supabase. Periksa kembali URL dan Kunci API Anda.")
     st.stop()
 
-# SESI AKTIF
-def load_valid_session(data_kas):
+# SESI AKTIF BERDASARKAN RIWAYAT SESI TERAKHIR
+def load_valid_session(data_riwayat_sesi, data_kas):
     waktu_default = "2020-01-01 00:00:00"
+    # Jika ada sesi yang sudah ditutup, waktu mulai sesi aktif adalah waktu tutup sesi terakhir
+    if data_riwayat_sesi and len(data_riwayat_sesi) > 0:
+        sorted_sesi = sorted(data_riwayat_sesi, key=lambda x: x.get('waktu_tutup_sesi', ''), reverse=True)
+        waktu_tutup_terakhir = sorted_sesi[0].get('waktu_tutup_sesi', waktu_default)
+        return waktu_tutup_terakhir, 0, 0
+    
+    # Fallback ke tabel kas jika belum ada riwayat sesi
     if data_kas and len(data_kas) > 0:
         sorted_kas = sorted(data_kas, key=lambda x: x.get('waktu', ''), reverse=False)
         row_terakhir = sorted_kas[-1]
         return row_terakhir.get('waktu', waktu_default), int(row_terakhir.get('cash', 0)), int(row_terakhir.get('digital', 0))
     return waktu_default, 0, 0
 
-waktu_mulai_db, modal_cash_db, modal_digi_db = load_valid_session(data_k)
+waktu_mulai_db, modal_cash_db, modal_digi_db = load_valid_session(data_sesi, data_k)
 
 if 'waktu_mulai_sesi' not in st.session_state or st.session_state.get('reset_session_flag', False):
     st.session_state['waktu_mulai_sesi'] = waktu_mulai_db
@@ -528,7 +535,7 @@ with tab1:
                 else: st.error(f"Sebagian data gagal disimpan! Error: {err_terakhir}")
             st.markdown('</div>', unsafe_allow_html=True)
 
-# --- TAB 2: RIWAYAT (DENGAN PENGEMBALIAN STOK SAAT HAPUS TRANSAKSI) ---
+# --- TAB 2: RIWAYAT ---
 with tab2:
     if data_t and len(data_t) > 0:
         df_t = pd.DataFrame(data_t)
@@ -587,7 +594,7 @@ with tab2:
                 c_chk, c_info = st.columns([1, 9])
                 with c_chk:
                     is_checked = st.checkbox("Pilih", key=f"chk_trx_{r_id}", label_visibility="collapsed")
-                    if is_checked: list_trx_terpilih.append(row) # Simpan seluruh baris data untuk dicek jenisnya
+                    if is_checked: list_trx_terpilih.append(row)
                 with c_info:
                     st.markdown(f"**{waktu_trx}** | <span style='color:#14B8A6;'>{jns_trx}</span><br>Nominal: {nom_trx} | Total: {tot_trx}", unsafe_allow_html=True)
                 
@@ -625,17 +632,15 @@ with tab2:
                     for sel_row in list_trx_terpilih:
                         trx_id = sel_row['id']
                         trx_jenis = sel_row['jenis']
-                        trx_nominal = int(sel_row['nominal']) # Nominal penjualan fisik biasanya sama dengan harga jual barang
+                        trx_nominal = int(sel_row['nominal'])
                         
-                        # Jika transaksi yang dihapus adalah "Penjualan Barang", kembalikan stok
                         if trx_jenis == "Penjualan Barang" and data_s:
                             for stok_item in data_s:
-                                # Cocokkan berdasarkan harga jual atau nama barang yang mendekati
                                 if int(stok_item.get('harga_jual', 0)) == trx_nominal:
                                     s_id = stok_item.get('id')
                                     s_stok_lama = int(stok_item.get('stok', 0))
                                     db_update("stok", s_id, {"stok": s_stok_lama + 1})
-                                    break # Kembalikan 1 pcs stok per transaksi yang dihapus
+                                    break
                         
                         db_delete("transaksi", trx_id)
                         
@@ -692,10 +697,9 @@ with tab3:
                     "modal_digital": int(st.session_state['modal_digi']), "total_cash_akhir": akhir_c,
                     "total_digital_akhir": akhir_d, "total_profit": int(prof_s)
                 })
-                b_kas, _ = db_insert("kas", {"waktu": waktu_tutup, "cash": 0, "digital": 0})
 
                 st.session_state['is_submitting'] = False
-                if b_sesi and b_kas:
+                if b_sesi:
                     st.session_state['modal_cash'] = 0
                     st.session_state['modal_digi'] = 0
                     st.session_state['penyesuaian_cash'] = 0
@@ -728,16 +732,12 @@ with tab3:
         if input_digi_baru > 0: st.caption(f"👀 Terbaca: **{f_uang(input_digi_baru)}**")
             
         if st.button("💾 Simpan Modal Sesi", type="primary", use_container_width=True):
-            waktu = datetime.now(pytz.timezone('Asia/Jakarta')).strftime("%Y-%m-%d %H:%M:%S")
-            sukses_m, err_m = db_insert("kas", {"waktu": waktu, "cash": int(input_cash_baru), "digital": int(input_digi_baru)})
-            if sukses_m:
-                st.session_state['modal_cash'] = int(input_cash_baru)
-                st.session_state['modal_digi'] = int(input_digi_baru)
-                st.cache_data.clear()
-                st.success("Modal awal sesi diperbarui!")
-                time.sleep(0.5)
-                st.rerun()
-            else: st.error(f"Gagal update modal! Error: {err_m}")
+            st.session_state['modal_cash'] = int(input_cash_baru)
+            st.session_state['modal_digi'] = int(input_digi_baru)
+            st.cache_data.clear()
+            st.success("Modal awal sesi diperbarui!")
+            time.sleep(0.5)
+            st.rerun()
 
     st.markdown("---")
 
