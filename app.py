@@ -212,23 +212,23 @@ with st.spinner("⏳ Sinkronisasi Database..."):
     data_k = fetch_data_from_sheet(ws_k, "Kas", st.session_state['cabang_terpilih'])
     data_sesi = fetch_data_from_sheet(ws_sesi, "Sesi", st.session_state['cabang_terpilih'])
 
-# CARI SESI VALID
+# CARI SESI VALID SECARA PRESISI
 def load_valid_session(data_kas):
-    waktu_default = datetime.now(pytz.timezone('Asia/Jakarta')).strftime("%Y-%m-%d %H:%M:%S")
+    waktu_default = "2020-01-01 00:00:00"
     if data_kas and len(data_kas) > 1:
-        for row in reversed(data_kas[1:]):
-            if len(row) >= 3:
-                c_val = int(row[1]) if str(row[1]).isdigit() else 0
-                d_val = int(row[2]) if str(row[2]).isdigit() else 0
-                if c_val > 0 or d_val > 0:
-                    return row[0], c_val, d_val
-        baris_terakhir = data_kas[-1]
-        return baris_terakhir[0], int(baris_terakhir[1]) if str(baris_terakhir[1]).isdigit() else 0, int(baris_terakhir[2]) if str(baris_terakhir[2]).isdigit() else 0
+        row_terakhir = data_kas[-1]
+        if len(row_terakhir) >= 3:
+            c_val = int(row_terakhir[1]) if str(row_terakhir[1]).isdigit() else 0
+            d_val = int(row_terakhir[2]) if str(row_terakhir[2]).isdigit() else 0
+            return row_terakhir[0], c_val, d_val
     return waktu_default, 0, 0
 
 waktu_mulai_db, modal_cash_db, modal_digi_db = load_valid_session(data_k)
 
-if 'waktu_mulai_sesi' not in st.session_state: st.session_state['waktu_mulai_sesi'] = waktu_mulai_db
+if 'waktu_mulai_sesi' not in st.session_state or st.session_state.get('reset_session_flag', False):
+    st.session_state['waktu_mulai_sesi'] = waktu_mulai_db
+    st.session_state['reset_session_flag'] = False
+
 if 'modal_cash' not in st.session_state: st.session_state['modal_cash'] = modal_cash_db
 if 'modal_digi' not in st.session_state: st.session_state['modal_digi'] = modal_digi_db
 if 'penyesuaian_cash' not in st.session_state: st.session_state['penyesuaian_cash'] = 0
@@ -522,7 +522,7 @@ with tab1:
                 else: st.error("Sebagian data gagal disimpan!")
             st.markdown('</div>', unsafe_allow_html=True)
 
-# --- TAB 2: RIWAYAT (HAPUS TRANSAKSI SESI SPESIFIK) ---
+# --- TAB 2: RIWAYAT ---
 with tab2:
     if data_t and len(data_t) > 1:
         df_t = pd.DataFrame(data_t[1:], columns=data_t[0])
@@ -535,7 +535,7 @@ with tab2:
         if data_sesi and len(data_sesi) > 1:
             for i in range(1, len(data_sesi)):
                 w_tutup_str = data_sesi[i][0]
-                w_mulai_str = data_sesi[i-1][0] if i > 1 else str(data_k[1][0] if len(data_k) > 1 else df_t['Waktu_Parsed'].min())
+                w_mulai_str = data_sesi[i-1][0] if i > 1 else str(data_k[1][0] if len(data_k) > 1 else "2020-01-01 00:00:00")
                 
                 label_s = f"Sesi Selesai: {w_tutup_str}"
                 daftar_pilihan_sesi.append(label_s)
@@ -552,10 +552,10 @@ with tab2:
         
         if pilih_filter_sesi == "Sesi Aktif Saat Ini":
             t_mulai_aktif = pd.to_datetime(st.session_state['waktu_mulai_sesi'])
-            df_t_filtered = df_t_filtered[df_t_filtered['Waktu_Parsed'] > t_mulai_aktif]
+            df_t_filtered = df_t_filtered[df_t_filtered['Waktu_Parsed'] >= t_mulai_aktif]
         else:
             w_mulai, w_tutup = rentang_sesi_dict[pilih_filter_sesi]
-            df_t_filtered = df_t_filtered[(df_t_filtered['Waktu_Parsed'] > w_mulai) & (df_t_filtered['Waktu_Parsed'] <= w_tutup)]
+            df_t_filtered = df_t_filtered[(df_t_filtered['Waktu_Parsed'] >= w_mulai) & (df_t_filtered['Waktu_Parsed'] <= w_tutup)]
 
         if pilih_filter_jenis != "Semua": 
             df_t_filtered = df_t_filtered[df_t_filtered[kolom_jenis] == pilih_filter_jenis]
@@ -653,7 +653,7 @@ with tab3:
                 df_t_all = pd.DataFrame(data_t[1:])
                 df_t_all['Waktu_Parsed'] = pd.to_datetime(df_t_all.iloc[:, 0], errors='coerce')
                 t_mulai = pd.to_datetime(st.session_state['waktu_mulai_sesi'])
-                df_sesi_ini = df_t_all[df_t_all['Waktu_Parsed'] > t_mulai].copy()
+                df_sesi_ini = df_t_all[df_t_all['Waktu_Parsed'] >= t_mulai].copy()
                 
                 if not df_sesi_ini.empty:
                     prof_s = pd.to_numeric(df_sesi_ini.iloc[:, 5], errors='coerce').fillna(0).sum()
@@ -683,11 +683,13 @@ with tab3:
 
                 st.session_state['is_submitting'] = False
                 if b_sesi and b_kas:
+                    # PERSIAPAN STATE DAN QUERY PARAMS TAHAN REFRESH
                     st.session_state['modal_cash'] = 0
                     st.session_state['modal_digi'] = 0
                     st.session_state['penyesuaian_cash'] = 0
                     st.session_state['penyesuaian_digi'] = 0
                     st.session_state['waktu_mulai_sesi'] = waktu_tutup
+                    st.session_state['reset_session_flag'] = True
                     st.session_state['konfirmasi_tutup_sesi'] = False
                     
                     st.cache_data.clear()
@@ -736,7 +738,7 @@ with tab3:
             df_trx['Waktu_Parsed'] = pd.to_datetime(df_trx.iloc[:, 0], errors='coerce')
             t_mulai_sesi = pd.to_datetime(st.session_state['waktu_mulai_sesi'])
             
-            df_sesi = df_trx[df_trx['Waktu_Parsed'] > t_mulai_sesi].copy()
+            df_sesi = df_trx[df_trx['Waktu_Parsed'] >= t_mulai_sesi].copy()
             if not df_sesi.empty:
                 profit_sesi_ini = pd.to_numeric(df_sesi.iloc[:, 5], errors='coerce').fillna(0).sum()
                 for idx, r in df_sesi.iterrows():
