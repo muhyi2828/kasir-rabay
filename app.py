@@ -15,7 +15,7 @@ import time
 # --- KONFIGURASI HALAMAN HARUS PALING ATAS ---
 st.set_page_config(page_title="RABAY CELL PRO", layout="centered", page_icon="🚀", initial_sidebar_state="collapsed")
 
-# --- CUSTOM CSS UI MODERN DARK MODE & PENAKLUKAN LAYOUT MOBILE ---
+# --- CUSTOM CSS UI MODERN DARK MODE ---
 st.markdown("""
     <style>
     .stApp { background-color: #050505; color: #ffffff; }
@@ -43,34 +43,6 @@ st.markdown("""
     .floating-container { position: fixed; bottom: 0; left: 0; right: 0; background-color: rgba(5, 5, 5, 0.95); padding: 12px 16px; z-index: 99999; border-top: 1px solid #222; box-shadow: 0 -4px 10px rgba(0,0,0,0.8); }
     .main .block-container { padding-bottom: 90px; }
     .login-box { background-color: #111; padding: 30px; border-radius: 12px; border: 1px solid #14B8A6; margin-top: 50px; text-align: center; }
-    
-    /* PAKSA FORMAT KOLOM HAPUS & EDIT MENJADI 30:70 SECARA AKURAT DI HP */
-    div[data-testid="stHorizontalBlock"]:has(.is-30-col) {
-        display: flex !important;
-        flex-direction: row !important;
-        flex-wrap: nowrap !important;
-        gap: 8px !important;
-    }
-    div[data-testid="column"]:has(.is-30-col) {
-        width: 30% !important;
-        flex: 3 1 30% !important;
-        min-width: 30% !important;
-    }
-    div[data-testid="column"]:has(.is-70-col) {
-        width: 70% !important;
-        flex: 7 1 70% !important;
-        min-width: 70% !important;
-    }
-    /* Sembunyikan elemen span penanda agar tidak merusak margin/padding */
-    div[data-testid="stMarkdownContainer"]:has(.is-30-col),
-    div[data-testid="stMarkdownContainer"]:has(.is-70-col),
-    div.element-container:has(.is-30-col),
-    div.element-container:has(.is-70-col) {
-        display: none !important;
-        height: 0px !important;
-        margin: 0px !important;
-        padding: 0px !important;
-    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -566,7 +538,7 @@ with tab1:
                 else: st.error("Sebagian data gagal disimpan!")
             st.markdown('</div>', unsafe_allow_html=True)
 
-# --- TAB 2: RIWAYAT ---
+# --- TAB 2: RIWAYAT (DENGAN CHECKBOX MULTI-DELETE) ---
 with tab2:
     if data_t and len(data_t) > 1:
         df_t = pd.DataFrame(data_t[1:], columns=data_t[0])
@@ -611,23 +583,12 @@ with tab2:
                 <span style="color:#fff; font-size:20px; font-weight:bold;">{f_uang(profit_filter_val)}</span>
             </div>
         """, unsafe_allow_html=True)
-        
-        if not df_t_filtered.empty:
-            with st.expander("⚠️ Hapus Riwayat Transaksi Sesi Ini"):
-                st.warning(f"PERINGATAN: Hanya transaksi yang ada di '{pilih_filter_sesi}' yang akan dihapus. Sesi lain tetap aman.")
-                konfirm_hapus_sesi = st.checkbox("Iya, hapus transaksi sesi ini", key="chk_del_sesi_trx")
-                if konfirm_hapus_sesi:
-                    if st.button("🗑️ Hapus Transaksi Sesi Ini", type="primary"):
-                        rows_to_delete = df_t_filtered['No_Baris'].tolist()
-                        for r_idx in sorted(rows_to_delete, reverse=True):
-                            safe_delete(ws_t, r_idx)
-                        st.cache_data.clear()
-                        st.success("Transaksi pada sesi ini berhasil dibersihkan!")
-                        time.sleep(0.5)
-                        st.rerun()
 
         st.markdown("---")
+        
         if not df_t_filtered.empty:
+            # KUMPULKAN BARIS YANG DICENTANG UNTUK DIHAPUS SEKALIGUS
+            list_trx_terpilih = []
             for index, row in df_t_filtered.iterrows():
                 b_num = int(row['No_Baris'])
                 waktu_trx = row.iloc[0]
@@ -635,24 +596,17 @@ with tab2:
                 nom_trx = f_uang(row.iloc[2]) if str(row.iloc[2]).isdigit() else row.iloc[2]
                 tot_trx = f_uang(row.iloc[4]) if str(row.iloc[4]).isdigit() else row.iloc[4]
                 
-                st.markdown(f"**{waktu_trx}** | <span style='color:#14B8A6;'>{jns_trx}</span><br>Nominal: {nom_trx} | Total: {tot_trx}", unsafe_allow_html=True)
+                # Kotak Centang & Detail Transaksi
+                c_chk, c_info = st.columns([1, 9])
+                with c_chk:
+                    is_checked = st.checkbox("Pilih", key=f"chk_trx_{b_num}", label_visibility="collapsed")
+                    if is_checked: list_trx_terpilih.append(b_num)
+                with c_info:
+                    st.markdown(f"**{waktu_trx}** | <span style='color:#14B8A6;'>{jns_trx}</span><br>Nominal: {nom_trx} | Total: {tot_trx}", unsafe_allow_html=True)
                 
-                col_btn1, col_btn2 = st.columns([3, 7])
-                with col_btn1:
-                    # INJEKSI MARKER AGAR CSS BISA MEMBACA KOLOM INI 30%
-                    st.markdown('<span class="is-30-col"></span>', unsafe_allow_html=True)
-                    if st.button("❌ Hapus", key=f"del_trx_{b_num}", use_container_width=True):
-                        if safe_delete(ws_t, b_num):
-                            st.cache_data.clear()
-                            st.success("Berhasil dihapus!")
-                            time.sleep(0.5)
-                            st.rerun()
-                        else: st.error("Gagal hapus!")
-                with col_btn2:
-                    # INJEKSI MARKER AGAR CSS BISA MEMBACA KOLOM INI 70%
-                    st.markdown('<span class="is-70-col"></span>', unsafe_allow_html=True)
-                    if st.button("✏️ Edit", key=f"edit_trx_{b_num}", use_container_width=True):
-                        st.session_state[f"mode_edit_trx_{b_num}"] = True
+                # Tombol Edit
+                if st.button("✏️ Edit Transaksi", key=f"edit_trx_{b_num}", use_container_width=True):
+                    st.session_state[f"mode_edit_trx_{b_num}"] = True
 
                 if st.session_state.get(f"mode_edit_trx_{b_num}", False):
                     with st.form(key=f"form_edit_trx_{b_num}"):
@@ -674,6 +628,17 @@ with tab2:
                             else: st.error("Gagal update!")
 
                 st.markdown("<hr style='margin:5px 0; border-color:#333;'>", unsafe_allow_html=True)
+
+            # TOMBOL HAPUS ITEM TERPILIH
+            if list_trx_terpilih:
+                st.markdown("<br>", unsafe_allow_html=True)
+                if st.button(f"🗑️ HAPUS {len(list_trx_terpilih)} TRANSAKSI TERPILIH", type="primary", use_container_width=True):
+                    for r_idx in sorted(list_trx_terpilih, reverse=True):
+                        safe_delete(ws_t, r_idx)
+                    st.cache_data.clear()
+                    st.success("Transaksi terpilih berhasil dihapus!")
+                    time.sleep(0.5)
+                    st.rerun()
         else:
             st.info("Tidak ada transaksi pada sesi ini.")
     else:
@@ -893,7 +858,7 @@ with tab3:
 
     else: st.info("Belum ada riwayat sesi yang ditutup.")
 
-# --- TAB 4: STOK BARANG ---
+# --- TAB 4: STOK BARANG (DENGAN CHECKBOX MULTI-DELETE) ---
 with tab4:
     existing_categories = ["Perdana", "Voucher", "Aksesoris", "Umum"]
     if data_s and len(data_s) > 1:
@@ -954,6 +919,8 @@ with tab4:
         if pilih_filter_kat != "Semua Kategori": df_s_filtered = df_s_filtered[df_s_filtered['Kategori'] == pilih_filter_kat]
 
         st.markdown("---")
+        
+        list_stok_terpilih = []
         for index, row in df_s_filtered.iterrows():
             b_stok = int(row['No_Baris'])
             bc = row['Barcode']
@@ -963,32 +930,17 @@ with tab4:
             h_jual = f_uang(row['Harga_Jual']) if str(row['Harga_Jual']).isdigit() else row['Harga_Jual']
             kat = row['Kategori'] if row['Kategori'] else "Umum"
             
-            st.markdown(f"**{nm}** | <span style='color:#14B8A6;'>[{kat}]</span> (Stok: {stk})<br>Modal: {h_modal} | Jual: {h_jual}<br>Barcode: {bc}", unsafe_allow_html=True)
+            # Kotak Centang & Detail Stok Barang
+            c_chk, c_info = st.columns([1, 9])
+            with c_chk:
+                is_checked_stok = st.checkbox("Pilih Stok", key=f"chk_stok_{b_stok}", label_visibility="collapsed")
+                if is_checked_stok: list_stok_terpilih.append(b_stok)
+            with c_info:
+                st.markdown(f"**{nm}** | <span style='color:#14B8A6;'>[{kat}]</span> (Stok: {stk})<br>Modal: {h_modal} | Jual: {h_jual}<br>Barcode: {bc}", unsafe_allow_html=True)
             
-            col_stk1, col_stk2 = st.columns([3, 7])
-            with col_stk1:
-                # INJEKSI MARKER AGAR CSS BISA MEMBACA KOLOM INI 30%
-                st.markdown('<span class="is-30-col"></span>', unsafe_allow_html=True)
-                if st.button("❌ Hapus", key=f"del_stk_{b_stok}", use_container_width=True): st.session_state[f"konfirm_stk_{b_stok}"] = True
-            with col_stk2:
-                # INJEKSI MARKER AGAR CSS BISA MEMBACA KOLOM INI 70%
-                st.markdown('<span class="is-70-col"></span>', unsafe_allow_html=True)
-                if st.button("✏️ Edit", key=f"edit_stok_btn_{b_stok}", use_container_width=True): st.session_state[f"mode_edit_stk_{b_stok}"] = True
-            
-            if st.session_state.get(f"konfirm_stk_{b_stok}", False):
-                st.error(f"Yakin ingin menghapus {nm}?")
-                cs_y, cs_n = st.columns([5, 5])
-                if cs_y.button("Ya, Hapus Stok!", key=f"y_stk_{b_stok}", type="primary"):
-                    if safe_delete(ws_s, b_stok):
-                        st.cache_data.clear()
-                        st.success("Stok dihapus!")
-                        st.session_state[f"konfirm_stk_{b_stok}"] = False
-                        time.sleep(0.5)
-                        st.rerun()
-                    else: st.error("Gagal hapus stok!")
-                if cs_n.button("Batal", key=f"n_stk_{b_stok}"):
-                    st.session_state[f"konfirm_stk_{b_stok}"] = False
-                    st.rerun()
+            # Tombol Edit
+            if st.button("✏️ Edit Data Barang", key=f"edit_stok_btn_{b_stok}", use_container_width=True): 
+                st.session_state[f"mode_edit_stk_{b_stok}"] = True
 
             if st.session_state.get(f"mode_edit_stk_{b_stok}", False):
                 with st.form(key=f"form_edit_stok_{b_stok}"):
@@ -1018,6 +970,17 @@ with tab4:
                         else: st.error("Gagal perbarui stok!")
 
             st.markdown("<hr style='margin:5px 0; border-color:#333;'>", unsafe_allow_html=True)
+
+        # TOMBOL HAPUS STOK TERPILIH
+        if list_stok_terpilih:
+            st.markdown("<br>", unsafe_allow_html=True)
+            if st.button(f"🗑️ HAPUS {len(list_stok_terpilih)} BARANG TERPILIH", type="primary", use_container_width=True):
+                for r_idx in sorted(list_stok_terpilih, reverse=True):
+                    safe_delete(ws_s, r_idx)
+                st.cache_data.clear()
+                st.success("Barang terpilih berhasil dihapus!")
+                time.sleep(0.5)
+                st.rerun()
     elif data_s is not None:
         st.info("Belum ada data stok.")
         if ws_s and len(data_s) == 0:
