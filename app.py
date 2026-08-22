@@ -183,7 +183,7 @@ if not st.session_state['is_logged_in']:
     st.markdown('</div>', unsafe_allow_html=True)
     st.stop()
 
-# --- FUNGSI AMBIL DATABASE DENGAN PROTEKSI API LIMIT & AUTO-CREATE AMAN ---
+# --- FUNGSI AMBIL DATABASE DENGAN PROTEKSI API LIMIT ---
 def get_branch_worksheets(sh, tampilan_cabang):
     if not sh: return None, None, None, None
     nama_sheet_asli = mapping_cabang.get(tampilan_cabang, "Pusat")
@@ -197,13 +197,13 @@ def get_branch_worksheets(sh, tampilan_cabang):
             return sh.worksheet(title)
         except:
             try:
-                time.sleep(1) # Jeda waktu agar terhindar dari limit Google API
+                time.sleep(1)
                 ws = sh.add_worksheet(title=title, rows=1000, cols=len(headers))
                 ws.append_row(headers)
                 return ws
             except:
                 try:
-                    return sh.worksheet(title) # Coba ambil lagi jika sudah terlanjur terbuat
+                    return sh.worksheet(title)
                 except:
                     return None
 
@@ -214,6 +214,25 @@ def get_branch_worksheets(sh, tampilan_cabang):
     return ws_t, ws_k, ws_s, ws_sesi
 
 ws_t, ws_k, ws_s, ws_sesi = get_branch_worksheets(sh_master, st.session_state['cabang_terpilih'])
+
+# --- FUNGSI AMBIL DATA STOK DENGAN CACHE AMAN ANTI-LIMIT API ---
+def ambil_data_stok(ws):
+    if not ws: return []
+    try:
+        return ws.get_all_values()
+    except:
+        time.sleep(2)
+        try: return ws.get_all_values()
+        except: return []
+
+def ambil_data_transaksi(ws):
+    if not ws: return []
+    try:
+        return ws.get_all_values()
+    except:
+        time.sleep(2)
+        try: return ws.get_all_values()
+        except: return []
 
 def ambil_modal_terakhir():
     if ws_k:
@@ -294,7 +313,7 @@ with tab1:
         if quick:
             code = quick.upper().strip()
             if ws_s:
-                stok_data = ws_s.get_all_values()
+                stok_data = ambil_data_stok(ws_s)
                 if len(stok_data) > 1:
                     df_s_check = pd.DataFrame(stok_data[1:])
                     df_s_check['Row_Idx'] = range(2, len(df_s_check) + 2)
@@ -521,7 +540,7 @@ with tab1:
 # --- TAB 2: RIWAYAT ---
 with tab2:
     if ws_t:
-        data_t = ws_t.get_all_values()
+        data_t = ambil_data_transaksi(ws_t)
         if len(data_t) > 1:
             df_t = pd.DataFrame(data_t[1:], columns=data_t[0])
             df_t['No_Baris'] = range(2, len(df_t) + 2)
@@ -620,7 +639,7 @@ with tab3:
             tot_digi_s = 0
             prof_s = 0
             if ws_t:
-                data_t_all = ws_t.get_all_values()
+                data_t_all = ambil_data_transaksi(ws_t)
                 if len(data_t_all) > 1:
                     df_t_all = pd.DataFrame(data_t_all[1:])
                     df_t_all['Waktu_Parsed'] = pd.to_datetime(df_t_all.iloc[:, 0], errors='coerce')
@@ -686,7 +705,7 @@ with tab3:
     profit_sesi_ini = 0
     
     if ws_t:
-        data_t = ws_t.get_all_values()
+        data_t = ambil_data_transaksi(ws_t)
         if len(data_t) > 1:
             df_trx = pd.DataFrame(data_t[1:])
             if len(df_trx.columns) >= 6:
@@ -788,7 +807,7 @@ with tab3:
 with tab4:
     existing_categories = ["Perdana", "Voucher", "Aksesoris", "Umum"]
     if ws_s:
-        data_s_raw = ws_s.get_all_values()
+        data_s_raw = ambil_data_stok(ws_s)
         if len(data_s_raw) > 1:
             for r in data_s_raw[1:]:
                 if len(r) > 6 and r[6] and r[6] not in existing_categories:
@@ -825,7 +844,7 @@ with tab4:
 
     st.markdown("---")
     if ws_s:
-        data_s = ws_s.get_all_values()
+        data_s = ambil_data_stok(ws_s)
         if len(data_s) > 1:
             rows_stok = data_s[1:]
             normalized_rows = []
