@@ -151,14 +151,14 @@ ws_t, ws_k, ws_s, ws_sesi = get_branch_worksheets(sh_master, st.session_state['c
 # --- CACHE DATA (5 DETIK TTL) ---
 @st.cache_data(ttl=5)
 def fetch_data_from_sheet(_ws, sheet_name, branch):
-    if not _ws: return None # Berubah dari [] menjadi None untuk deteksi error
+    if not _ws: return None
     for _ in range(3):
         try:
             data = _ws.get_all_values()
             return data if data else []
         except Exception:
             time.sleep(1)
-    return None # Jika 3 kali gagal, kembalikan None agar sistem tidak mengira database kosong
+    return None
 
 def clean_row_data(data_list):
     cleaned = []
@@ -182,7 +182,6 @@ def safe_update(ws, cell_range, data):
     cleaned_data = [clean_row_data(row) for row in data]
     for _ in range(3):
         try:
-            # Memastikan kompatibilitas untuk semua versi library gspread
             try:
                 ws.update(values=cleaned_data, range_name=cell_range)
             except TypeError:
@@ -218,7 +217,6 @@ with st.spinner("⏳ Sinkronisasi Database..."):
     data_k = fetch_data_from_sheet(ws_k, "Kas", st.session_state['cabang_terpilih'])
     data_sesi = fetch_data_from_sheet(ws_sesi, "Sesi", st.session_state['cabang_terpilih'])
 
-# Jika salah satu data = None (artinya gagal load dari server Google), blokir aplikasi agar tidak merusak data.
 if data_t is None or data_s is None or data_k is None or data_sesi is None:
     st.error("⚠️ Gagal terhubung ke server Google Sheets. Trafik mungkin sedang penuh. Silakan muat ulang (refresh) halaman ini.")
     st.stop()
@@ -257,16 +255,16 @@ def hitung_admin(nominal, jenis):
         elif nominal <= 1000000: return 8000
         else: return 10000
     elif jenis == "Tarik Tunai":
-        if nominal <= 300000: return 3000
-        elif nominal <= 1000000: return 5000
-        elif nominal <= 2000000: return 8000
-        elif nominal <= 3000000: return 10000
-        elif nominal <= 5000000: return 15000
-        elif nominal <= 7000000: return 20000
-        elif nominal <= 10000000: return 25000
-        elif nominal <= 15000000: return 30000
-        elif nominal <= 20000000: return 35000
-        else: return 35000 + (-(-(nominal - 20000000) // 5000000) * 5000)
+        if nominal <= 303000: return 3000
+        elif nominal <= 1005000: return 5000
+        elif nominal <= 2008000: return 8000
+        elif nominal <= 3010000: return 10000
+        elif nominal <= 5015000: return 15000
+        elif nominal <= 7020000: return 20000
+        elif nominal <= 10025000: return 25000
+        elif nominal <= 15030000: return 30000
+        elif nominal <= 20035000: return 35000
+        else: return 35000 + (-(-(nominal - 20035000) // 5000000) * 5000)
     else: 
         if nominal <= 98000: return 3000
         elif nominal <= 400000: return 5000
@@ -904,10 +902,13 @@ with tab4:
 
     st.markdown("---")
     if data_s and len(data_s) > 1:
+        # PENGAMANAN: MENGABAIKAN BARIS HEADER PERTAMA DI TABEL STOK
         rows_stok = data_s[1:]
         normalized_rows = []
-        for r in rows_stok:
-            # Cegah mutasi cache pada sistem baru
+        for idx_r, r in enumerate(rows_stok):
+            # Lewati jika baris tersebut adalah header ganda
+            if r[0] == "Barcode" and r[1] == "Nama_Barang":
+                continue
             new_r = list(r)
             while len(new_r) < 7: new_r.append("Umum")
             normalized_rows.append(new_r)
