@@ -118,7 +118,7 @@ if not st.session_state['is_logged_in']:
     st.markdown('</div>', unsafe_allow_html=True)
     st.stop()
 
-# --- FUNGSI DATABASE SUPABASE (CRUD DENGAN PELACAK ERROR) ---
+# --- FUNGSI DATABASE SUPABASE (CRUD) ---
 cabang_aktif = st.session_state['cabang_terpilih']
 
 @st.cache_data(ttl=5)
@@ -357,7 +357,6 @@ with tab1:
             st.markdown("---")
             st.write("### 🛒 Keranjang Belanjaan")
             
-            # TAMPILKAN DAN EDIT QTY ITEM DALAM KERANJANG
             for idx_c, cart_item in enumerate(st.session_state['keranjang_belanja']):
                 c_nama = cart_item['Nama']
                 c_jenis = cart_item['Jenis']
@@ -375,7 +374,6 @@ with tab1:
                 
                 st.markdown("<hr style='margin:5px 0; border-color:#333;'>", unsafe_allow_html=True)
 
-            # HITUNG TOTAL KESELURUHAN DARI SEMUA QTY
             total_belanja = sum(
                 (item['Nominal Satuan'] + (item['Admin/Profit Satuan'] if item['Jenis'] == "Transaksi Lainnya" else 0)) * item['Qty']
                 for item in st.session_state['keranjang_belanja']
@@ -395,12 +393,10 @@ with tab1:
                     r_stok = item['Row_Stok']
                     s_stk = item['Sisa_Stok']
                     
-                    # Kurangi stok sebanyak Qty jika barang fisik
                     if j_trx == "Penjualan Barang" and r_stok and s_stk > 0:
                         stok_baru = max(0, s_stk - qty)
                         db_update("stok", r_stok, {"stok": stok_baru})
                     
-                    # Looping simpan transaksi sejumlah Qty atau masukkan total dikali qty
                     for _ in range(qty):
                         nom_trx = item['Nominal Satuan']
                         adm_trx = item['Admin/Profit Satuan']
@@ -532,7 +528,7 @@ with tab1:
                 else: st.error(f"Sebagian data gagal disimpan! Error: {err_terakhir}")
             st.markdown('</div>', unsafe_allow_html=True)
 
-# --- TAB 2: RIWAYAT ---
+# --- TAB 2: RIWAYAT (DENGAN PENGEMBALIAN STOK SAAT HAPUS TRANSAKSI) ---
 with tab2:
     if data_t and len(data_t) > 0:
         df_t = pd.DataFrame(data_t)
@@ -591,7 +587,7 @@ with tab2:
                 c_chk, c_info = st.columns([1, 9])
                 with c_chk:
                     is_checked = st.checkbox("Pilih", key=f"chk_trx_{r_id}", label_visibility="collapsed")
-                    if is_checked: list_trx_terpilih.append(r_id)
+                    if is_checked: list_trx_terpilih.append(row) # Simpan seluruh baris data untuk dicek jenisnya
                 with c_info:
                     st.markdown(f"**{waktu_trx}** | <span style='color:#14B8A6;'>{jns_trx}</span><br>Nominal: {nom_trx} | Total: {tot_trx}", unsafe_allow_html=True)
                 
@@ -626,10 +622,25 @@ with tab2:
             if list_trx_terpilih:
                 st.markdown("<br>", unsafe_allow_html=True)
                 if st.button(f"🗑️ HAPUS {len(list_trx_terpilih)} TRANSAKSI TERPILIH", type="primary", use_container_width=True):
-                    for r_id in list_trx_terpilih:
-                        db_delete("transaksi", r_id)
+                    for sel_row in list_trx_terpilih:
+                        trx_id = sel_row['id']
+                        trx_jenis = sel_row['jenis']
+                        trx_nominal = int(sel_row['nominal']) # Nominal penjualan fisik biasanya sama dengan harga jual barang
+                        
+                        # Jika transaksi yang dihapus adalah "Penjualan Barang", kembalikan stok
+                        if trx_jenis == "Penjualan Barang" and data_s:
+                            for stok_item in data_s:
+                                # Cocokkan berdasarkan harga jual atau nama barang yang mendekati
+                                if int(stok_item.get('harga_jual', 0)) == trx_nominal:
+                                    s_id = stok_item.get('id')
+                                    s_stok_lama = int(stok_item.get('stok', 0))
+                                    db_update("stok", s_id, {"stok": s_stok_lama + 1})
+                                    break # Kembalikan 1 pcs stok per transaksi yang dihapus
+                        
+                        db_delete("transaksi", trx_id)
+                        
                     st.cache_data.clear()
-                    st.success("Transaksi terpilih berhasil dihapus!")
+                    st.success("Transaksi terpilih berhasil dihapus & stok dikembalikan!")
                     time.sleep(0.5)
                     st.rerun()
         else:
