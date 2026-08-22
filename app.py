@@ -255,16 +255,16 @@ def hitung_admin(nominal, jenis):
         elif nominal <= 1000000: return 8000
         else: return 10000
     elif jenis == "Tarik Tunai":
-        if nominal <= 303000: return 3000
-        elif nominal <= 1005000: return 5000
-        elif nominal <= 2008000: return 8000
-        elif nominal <= 3010000: return 10000
-        elif nominal <= 5015000: return 15000
-        elif nominal <= 7020000: return 20000
-        elif nominal <= 10025000: return 25000
-        elif nominal <= 15030000: return 30000
-        elif nominal <= 20035000: return 35000
-        else: return 35000 + (-(-(nominal - 20035000) // 5000000) * 5000)
+        if nominal <= 300000: return 3000
+        elif nominal <= 1000000: return 5000
+        elif nominal <= 2000000: return 8000
+        elif nominal <= 3000000: return 10000
+        elif nominal <= 5000000: return 15000
+        elif nominal <= 7000000: return 20000
+        elif nominal <= 10000000: return 25000
+        elif nominal <= 15000000: return 30000
+        elif nominal <= 20000000: return 35000
+        else: return 35000 + (-(-(nominal - 20000000) // 5000000) * 5000)
     else: 
         if nominal <= 98000: return 3000
         elif nominal <= 400000: return 5000
@@ -608,7 +608,7 @@ with tab2:
                 
                 st.markdown(f"**{waktu_trx}** | <span style='color:#14B8A6;'>{jns_trx}</span><br>Nominal: {nom_trx} | Total: {tot_trx}", unsafe_allow_html=True)
                 
-                col_btn1, col_btn2 = st.columns(2)
+                col_btn1, col_btn2 = st.columns([3, 7])
                 with col_btn1:
                     if st.button("❌ Hapus", key=f"del_trx_{b_num}", use_container_width=True):
                         if safe_delete(ws_t, b_num):
@@ -902,11 +902,9 @@ with tab4:
 
     st.markdown("---")
     if data_s and len(data_s) > 1:
-        # PENGAMANAN: MENGABAIKAN BARIS HEADER PERTAMA DI TABEL STOK
         rows_stok = data_s[1:]
         normalized_rows = []
         for idx_r, r in enumerate(rows_stok):
-            # Lewati jika baris tersebut adalah header ganda
             if r[0] == "Barcode" and r[1] == "Nama_Barang":
                 continue
             new_r = list(r)
@@ -934,7 +932,8 @@ with tab4:
             
             st.markdown(f"**{nm}** | <span style='color:#14B8A6;'>[{kat}]</span> (Stok: {stk})<br>Modal: {h_modal} | Jual: {h_jual}<br>Barcode: {bc}", unsafe_allow_html=True)
             
-            col_stk1, col_stk2 = st.columns(2)
+            # FORMATTING DUA TOMBOL DALAM SATU BARIS (30% DAN 70%)
+            col_stk1, col_stk2 = st.columns([3, 7])
             with col_stk1:
                 if st.button("❌ Hapus", key=f"del_stk_{b_stok}", use_container_width=True): st.session_state[f"konfirm_stk_{b_stok}"] = True
             with col_stk2:
