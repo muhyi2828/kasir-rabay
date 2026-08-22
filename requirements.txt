@@ -1,8 +1,8 @@
 streamlit
-google-genai
-pillow
-gspread
-pytz
 pandas
 plotly
-pip install supabase
+pillow
+google-genai
+gspread
+supabase
+pytz
