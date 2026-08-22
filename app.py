@@ -183,7 +183,7 @@ if not st.session_state['is_logged_in']:
     st.markdown('</div>', unsafe_allow_html=True)
     st.stop()
 
-# --- FUNGSI TANGGUNG DENGAN AUTO-CREATE SANGAT KUAT ---
+# --- FUNGSI AMBIL WORKSEET ---
 def get_or_create_sheet(sh, title, headers):
     if not sh: return None
     try:
@@ -220,11 +220,22 @@ def fetch_data_from_sheet(_ws, sheet_name, branch):
             time.sleep(0.5)
     return []
 
+# KONVERSI TIPE DATA KE NATIVE PYTHON UNTUK CEGAH SERIALIZATION ERROR
+def clean_row_data(data_list):
+    cleaned = []
+    for item in data_list:
+        if hasattr(item, 'item'):
+            cleaned.append(item.item())
+        else:
+            cleaned.append(item)
+    return cleaned
+
 def safe_append(ws, data):
     if not ws: return False
+    cleaned_data = clean_row_data(data)
     for _ in range(3):
         try:
-            ws.append_row(data)
+            ws.append_row(cleaned_data)
             return True
         except:
             time.sleep(1)
@@ -232,9 +243,10 @@ def safe_append(ws, data):
 
 def safe_update(ws, cell_range, data):
     if not ws: return False
+    cleaned_data = [clean_row_data(row) for row in data]
     for _ in range(3):
         try:
-            ws.update(cell_range, data)
+            ws.update(cell_range, cleaned_data)
             return True
         except:
             time.sleep(1)
@@ -242,9 +254,10 @@ def safe_update(ws, cell_range, data):
 
 def safe_update_cell(ws, row, col, val):
     if not ws: return False
+    clean_val = val.item() if hasattr(val, 'item') else val
     for _ in range(3):
         try:
-            ws.update_cell(row, col, val)
+            ws.update_cell(row, col, clean_val)
             return True
         except:
             time.sleep(1)
@@ -424,7 +437,7 @@ with tab1:
                         stok_skrg = int(data_s[row_brg_det - 1][2]) if str(data_s[row_brg_det - 1][2]).isdigit() else 0
                         if stok_skrg > 0: safe_update_cell(ws_s, row_brg_det, 3, stok_skrg - 1)
                     
-                    if safe_append(ws_t, [waktu, jenis_terpilih, nominal_trx, admin, total_uang, profit_bersih]):
+                    if safe_append(ws_t, [waktu, jenis_terpilih, int(nominal_trx), int(admin), int(total_uang), int(profit_bersih)]):
                         st.cache_data.clear()
                         st.success("Tersimpan!")
                         time.sleep(0.5)
@@ -435,7 +448,7 @@ with tab1:
                 if st.button("🛒 MASUK KERANJANG", use_container_width=True):
                     st.session_state['keranjang_belanja'].append({
                         'Jenis': jenis_terpilih, 'Nama': nama_brg_det if nama_brg_det else jenis_terpilih,
-                        'Nominal': nominal_trx, 'Admin/Profit': profit_bersih, 'Total': total_uang, 'Row_Stok': row_brg_det
+                        'Nominal': int(nominal_trx), 'Admin/Profit': int(profit_bersih), 'Total': int(total_uang), 'Row_Stok': row_brg_det
                     })
                     st.success("Masuk keranjang!")
                     st.rerun()
@@ -462,7 +475,7 @@ with tab1:
                     if j_trx == "Penjualan Barang" and ws_s and r_stok:
                         stok_skrg = int(data_s[r_stok - 1][2]) if str(data_s[r_stok - 1][2]).isdigit() else 0
                         if stok_skrg > 0: safe_update_cell(ws_s, r_stok, 3, stok_skrg - 1)
-                    if not safe_append(ws_t, [waktu, j_trx, nom_trx, adm_trx, tot_trx, adm_trx]): berhasil = False
+                    if not safe_append(ws_t, [waktu, j_trx, int(nom_trx), int(adm_trx), int(tot_trx), int(adm_trx)]): berhasil = False
                 
                 if berhasil:
                     st.session_state['keranjang_belanja'] = []
@@ -559,7 +572,7 @@ with tab1:
                     nom = item['Nominal (Rp)']
                     admin = hitung_admin(nom, jenis)
                     total = nom - admin if jenis == "Tarik Tunai" else nom + admin
-                    if not safe_append(ws_t, [waktu, jenis, nom, admin, total, admin]): berhasil = False
+                    if not safe_append(ws_t, [waktu, jenis, int(nom), int(admin), int(total), int(admin)]): berhasil = False
                     
                 if berhasil:
                     st.session_state['draf_scan_smart'] = []
@@ -644,7 +657,7 @@ with tab2:
                     e_prof = st.number_input("Profit", value=int(row.iloc[5]) if str(row.iloc[5]).isdigit() else 0, step=1000)
                     
                     if st.form_submit_button("Simpan Perubahan"):
-                        if safe_update(ws_t, f"A{b_num}:F{b_num}", [[e_waktu, e_jenis, e_nom, e_adm, e_tot, e_prof]]):
+                        if safe_update(ws_t, f"A{b_num}:F{b_num}", [[e_waktu, e_jenis, int(e_nom), int(e_adm), int(e_tot), int(e_prof)]]):
                             st.session_state[f"mode_edit_trx_{b_num}"] = False
                             st.cache_data.clear()
                             st.success("Perubahan disimpan!")
@@ -700,32 +713,35 @@ with tab3:
                             tot_digi_s -= nom
                             tot_cash_s += tot
 
-            akhir_c = st.session_state['modal_cash'] + tot_cash_s + st.session_state['penyesuaian_cash']
-            akhir_d = st.session_state['modal_digi'] + tot_digi_s + st.session_state['penyesuaian_digi']
+            akhir_c = int(st.session_state['modal_cash'] + tot_cash_s + st.session_state['penyesuaian_cash'])
+            akhir_d = int(st.session_state['modal_digi'] + tot_digi_s + st.session_state['penyesuaian_digi'])
             waktu_tutup = datetime.now(pytz.timezone('Asia/Jakarta')).strftime("%Y-%m-%d %H:%M:%S")
 
-            # RE-FETCH ON-DEMAND UNTUK MEMASTIKAN TARGET TERSEDIA
-            nama_asli = mapping_cabang.get(st.session_state['cabang_terpilih'], "Pusat")
-            target_ws_sesi = ws_sesi or get_or_create_sheet(sh_master, f"RiwayatSesi_{nama_asli}", ["Waktu_Tutup_Sesi", "Modal_Cash", "Modal_Digital", "Total_Cash_Akhir", "Total_Digital_Akhir", "Total_Profit"])
-            target_ws_k = ws_k or get_or_create_sheet(sh_master, f"Kas_Harian_{nama_asli}", ["Waktu", "Cash", "Digital"])
+            # DETAIL LOGGING UNTUK DETEKSI ERROR
+            try:
+                nama_asli = mapping_cabang.get(st.session_state['cabang_terpilih'], "Pusat")
+                target_ws_sesi = ws_sesi or get_or_create_sheet(sh_master, f"RiwayatSesi_{nama_asli}", ["Waktu_Tutup_Sesi", "Modal_Cash", "Modal_Digital", "Total_Cash_Akhir", "Total_Digital_Akhir", "Total_Profit"])
+                target_ws_k = ws_k or get_or_create_sheet(sh_master, f"Kas_Harian_{nama_asli}", ["Waktu", "Cash", "Digital"])
 
-            berhasil_sesi = safe_append(target_ws_sesi, [waktu_tutup, st.session_state['modal_cash'], st.session_state['modal_digi'], akhir_c, akhir_d, prof_s])
-            berhasil_kas = safe_append(target_ws_k, [waktu_tutup, 0, 0])
+                b_sesi = safe_append(target_ws_sesi, [waktu_tutup, int(st.session_state['modal_cash']), int(st.session_state['modal_digi']), akhir_c, akhir_d, int(prof_s)])
+                b_kas = safe_append(target_ws_k, [waktu_tutup, 0, 0])
 
-            if berhasil_sesi and berhasil_kas:
-                st.session_state['modal_cash'] = 0
-                st.session_state['modal_digi'] = 0
-                st.session_state['penyesuaian_cash'] = 0
-                st.session_state['penyesuaian_digi'] = 0
-                st.session_state['waktu_mulai_sesi'] = waktu_tutup
-                st.session_state['konfirmasi_tutup_sesi'] = False
-                
-                st.cache_data.clear()
-                st.success("🎉 Sesi Berhasil Diakhiri & Diarsipkan!")
-                time.sleep(1)
-                st.rerun()
-            else:
-                st.error("❌ Gagal terhubung ke Google Sheets. Silakan coba klik sekali lagi!")
+                if b_sesi and b_kas:
+                    st.session_state['modal_cash'] = 0
+                    st.session_state['modal_digi'] = 0
+                    st.session_state['penyesuaian_cash'] = 0
+                    st.session_state['penyesuaian_digi'] = 0
+                    st.session_state['waktu_mulai_sesi'] = waktu_tutup
+                    st.session_state['konfirmasi_tutup_sesi'] = False
+                    
+                    st.cache_data.clear()
+                    st.success("🎉 Sesi Berhasil Diakhiri & Diarsipkan!")
+                    time.sleep(1)
+                    st.rerun()
+                else:
+                    st.error("❌ Gagal menyimpan data ke Google Sheets. Coba klik lagi.")
+            except Exception as e:
+                st.error(f"Detail Error Server: {e}")
 
         if col_ks2.button("❌ Batal", use_container_width=True):
             st.session_state['konfirmasi_tutup_sesi'] = False
@@ -742,9 +758,9 @@ with tab3:
             
         if st.button("💾 Simpan Modal Sesi", type="primary", use_container_width=True):
             waktu = datetime.now(pytz.timezone('Asia/Jakarta')).strftime("%Y-%m-%d %H:%M:%S")
-            if safe_append(ws_k, [waktu, input_cash_baru, input_digi_baru]):
-                st.session_state['modal_cash'] = input_cash_baru
-                st.session_state['modal_digi'] = input_digi_baru
+            if safe_append(ws_k, [waktu, int(input_cash_baru), int(input_digi_baru)]):
+                st.session_state['modal_cash'] = int(input_cash_baru)
+                st.session_state['modal_digi'] = int(input_digi_baru)
                 st.cache_data.clear()
                 st.success("Modal awal sesi diperbarui!")
                 time.sleep(0.5)
@@ -876,7 +892,7 @@ with tab4:
         if st.button("💾 Simpan Barang", type="primary", use_container_width=True):
             final_kat = kategori_barang if kategori_barang.strip() else "Umum"
             if nama_barang:
-                if safe_append(ws_s, [barcode_input, nama_barang, stok_awal, harga_modal, harga_jual, kode_cepat_brg, final_kat]):
+                if safe_append(ws_s, [barcode_input, nama_barang, int(stok_awal), int(harga_modal), int(harga_jual), kode_cepat_brg, final_kat]):
                     st.cache_data.clear()
                     st.success("Tersimpan!")
                     time.sleep(0.5)
@@ -952,7 +968,7 @@ with tab4:
                     
                     if st.form_submit_button("Simpan Perubahan Stok"):
                         final_es_kat = es_kat if es_kat.strip() else kat
-                        if safe_update(ws_s, f"A{b_stok}:G{b_stok}", [[es_bc, es_nm, es_stk, es_mod, es_jul, es_kod, final_es_kat]]):
+                        if safe_update(ws_s, f"A{b_stok}:G{b_stok}", [[es_bc, es_nm, int(es_stk), int(es_mod), int(es_jul), es_kod, final_es_kat]]):
                             st.session_state[f"mode_edit_stk_{b_stok}"] = False
                             st.cache_data.clear()
                             st.success("Stok diperbarui!")
