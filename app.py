@@ -15,7 +15,7 @@ import time
 # --- KONFIGURASI HALAMAN HARUS PALING ATAS ---
 st.set_page_config(page_title="RABAY CELL PRO", layout="centered", page_icon="🚀", initial_sidebar_state="collapsed")
 
-# --- CUSTOM CSS UI MODERN DARK MODE, FLOATING BUTTON & FORCE ROW ON MOBILE ---
+# --- CUSTOM CSS UI MODERN DARK MODE & PENAKLUKAN LAYOUT MOBILE ---
 st.markdown("""
     <style>
     .stApp { background-color: #050505; color: #ffffff; }
@@ -44,13 +44,32 @@ st.markdown("""
     .main .block-container { padding-bottom: 90px; }
     .login-box { background-color: #111; padding: 30px; border-radius: 12px; border: 1px solid #14B8A6; margin-top: 50px; text-align: center; }
     
-    /* PAKSA FORMAT KOLOM SEJAJAR 1 BARIS DI HP TANPA MERUSAK RASIO 30:70 */
-    div[data-testid="stHorizontalBlock"] {
+    /* PAKSA FORMAT KOLOM HAPUS & EDIT MENJADI 30:70 SECARA AKURAT DI HP */
+    div[data-testid="stHorizontalBlock"]:has(.is-30-col) {
+        display: flex !important;
         flex-direction: row !important;
         flex-wrap: nowrap !important;
+        gap: 8px !important;
     }
-    div[data-testid="column"] {
-        min-width: 0 !important; /* Mematikan paksaan Streamlit yang membuat kolom jadi 100% di HP */
+    div[data-testid="column"]:has(.is-30-col) {
+        width: 30% !important;
+        flex: 3 1 30% !important;
+        min-width: 30% !important;
+    }
+    div[data-testid="column"]:has(.is-70-col) {
+        width: 70% !important;
+        flex: 7 1 70% !important;
+        min-width: 70% !important;
+    }
+    /* Sembunyikan elemen span penanda agar tidak merusak margin/padding */
+    div[data-testid="stMarkdownContainer"]:has(.is-30-col),
+    div[data-testid="stMarkdownContainer"]:has(.is-70-col),
+    div.element-container:has(.is-30-col),
+    div.element-container:has(.is-70-col) {
+        display: none !important;
+        height: 0px !important;
+        margin: 0px !important;
+        padding: 0px !important;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -255,7 +274,7 @@ if 'draf_scan_smart' not in st.session_state: st.session_state['draf_scan_smart'
 if 'keranjang_belanja' not in st.session_state: st.session_state['keranjang_belanja'] = []
 if 'is_submitting' not in st.session_state: st.session_state['is_submitting'] = False
 
-# --- FUNGSI HITUNG ADMIN BARU BERDASARKAN GAMBAR MATRIKS DATES ---
+# --- FUNGSI HITUNG ADMIN ---
 def hitung_admin(nominal, jenis):
     if jenis == "E-Wallet" and nominal <= 1500000:
         if nominal <= 98000: return 2000
@@ -620,6 +639,8 @@ with tab2:
                 
                 col_btn1, col_btn2 = st.columns([3, 7])
                 with col_btn1:
+                    # INJEKSI MARKER AGAR CSS BISA MEMBACA KOLOM INI 30%
+                    st.markdown('<span class="is-30-col"></span>', unsafe_allow_html=True)
                     if st.button("❌ Hapus", key=f"del_trx_{b_num}", use_container_width=True):
                         if safe_delete(ws_t, b_num):
                             st.cache_data.clear()
@@ -628,6 +649,8 @@ with tab2:
                             st.rerun()
                         else: st.error("Gagal hapus!")
                 with col_btn2:
+                    # INJEKSI MARKER AGAR CSS BISA MEMBACA KOLOM INI 70%
+                    st.markdown('<span class="is-70-col"></span>', unsafe_allow_html=True)
                     if st.button("✏️ Edit", key=f"edit_trx_{b_num}", use_container_width=True):
                         st.session_state[f"mode_edit_trx_{b_num}"] = True
 
@@ -944,8 +967,12 @@ with tab4:
             
             col_stk1, col_stk2 = st.columns([3, 7])
             with col_stk1:
+                # INJEKSI MARKER AGAR CSS BISA MEMBACA KOLOM INI 30%
+                st.markdown('<span class="is-30-col"></span>', unsafe_allow_html=True)
                 if st.button("❌ Hapus", key=f"del_stk_{b_stok}", use_container_width=True): st.session_state[f"konfirm_stk_{b_stok}"] = True
             with col_stk2:
+                # INJEKSI MARKER AGAR CSS BISA MEMBACA KOLOM INI 70%
+                st.markdown('<span class="is-70-col"></span>', unsafe_allow_html=True)
                 if st.button("✏️ Edit", key=f"edit_stok_btn_{b_stok}", use_container_width=True): st.session_state[f"mode_edit_stk_{b_stok}"] = True
             
             if st.session_state.get(f"konfirm_stk_{b_stok}", False):
