@@ -522,21 +522,19 @@ with tab1:
                 else: st.error("Sebagian data gagal disimpan!")
             st.markdown('</div>', unsafe_allow_html=True)
 
-# --- TAB 2: RIWAYAT (DENGAN ISOLASI PRESISI RENTANG WAKTU SESI) ---
+# --- TAB 2: RIWAYAT (HAPUS TRANSAKSI SESI SPESIFIK) ---
 with tab2:
     if data_t and len(data_t) > 1:
         df_t = pd.DataFrame(data_t[1:], columns=data_t[0])
         df_t['No_Baris'] = range(2, len(df_t) + 2)
         df_t['Waktu_Parsed'] = pd.to_datetime(df_t.iloc[:, 0], errors='coerce')
         
-        # Buat Daftar Sesi & Rentang Waktu yang Presisi
         daftar_pilihan_sesi = ["Sesi Aktif Saat Ini"]
         rentang_sesi_dict = {}
         
         if data_sesi and len(data_sesi) > 1:
             for i in range(1, len(data_sesi)):
                 w_tutup_str = data_sesi[i][0]
-                # Waktu mulai sesi diambil tepat setelah sesi sebelumnya ditutup
                 w_mulai_str = data_sesi[i-1][0] if i > 1 else str(data_k[1][0] if len(data_k) > 1 else df_t['Waktu_Parsed'].min())
                 
                 label_s = f"Sesi Selesai: {w_tutup_str}"
@@ -552,7 +550,6 @@ with tab2:
         
         df_t_filtered = df_t.copy()
         
-        # Isolasi Waktu Sesi (Strict Boundary > Mulai Dan <= Tutup)
         if pilih_filter_sesi == "Sesi Aktif Saat Ini":
             t_mulai_aktif = pd.to_datetime(st.session_state['waktu_mulai_sesi'])
             df_t_filtered = df_t_filtered[df_t_filtered['Waktu_Parsed'] > t_mulai_aktif]
@@ -571,19 +568,20 @@ with tab2:
             </div>
         """, unsafe_allow_html=True)
         
-        with st.expander("⚠️ Hapus Semua Riwayat Transaksi Sesi Ini"):
-            st.warning(f"PERINGATAN: Seluruh riwayat transaksi yang tampil pada filter sesi ini akan dihapus!")
-            konfirm_hapus_semua = st.checkbox("Iya, saya yakin ingin menghapus riwayat yang tampil", key="chk_del_all_trx")
-            if konfirm_hapus_semua:
-                if st.button("🗑️ Hapus Permanen", type="primary"):
-                    try:
-                        ws_t.clear()
-                        ws_t.append_row(data_t[0])
+        if not df_t_filtered.empty:
+            with st.expander("⚠️ Hapus Riwayat Transaksi Sesi Ini"):
+                st.warning(f"PERINGATAN: Hanya transaksi yang ada di '{pilih_filter_sesi}' yang akan dihapus. Sesi lain tetap aman.")
+                konfirm_hapus_sesi = st.checkbox("Iya, hapus transaksi sesi ini", key="chk_del_sesi_trx")
+                if konfirm_hapus_sesi:
+                    if st.button("🗑️ Hapus Transaksi Sesi Ini", type="primary"):
+                        rows_to_delete = df_t_filtered['No_Baris'].tolist()
+                        # Hapus dari bawah ke atas agar indeks baris tidak bergeser
+                        for r_idx in sorted(rows_to_delete, reverse=True):
+                            safe_delete(ws_t, r_idx)
                         st.cache_data.clear()
-                        st.success("Riwayat berhasil dibersihkan!")
+                        st.success("Transaksi pada sesi ini berhasil dibersihkan!")
                         time.sleep(0.5)
                         st.rerun()
-                    except: st.error("Gagal menghapus! Coba lagi.")
 
         st.markdown("---")
         if not df_t_filtered.empty:
