@@ -233,25 +233,35 @@ def ambil_data_transaksi(ws):
         try: return ws.get_all_values()
         except: return []
 
-def ambil_modal_terakhir():
+# --- AMBIL DATA SESI & MODAL TERAKHIR DARI DATABASE KAS_HARIAN ---
+def load_session_state():
     if ws_k:
         try:
             data_k = ws_k.get_all_values()
-            if len(data_k) > 1: return int(data_k[-1][1]), int(data_k[-1][2])
-        except: pass
-    return 0, 0
+            if len(data_k) > 1:
+                baris_terakhir = data_k[-1]
+                waktu_db = baris_terakhir[0]
+                cash_db = int(baris_terakhir[1]) if str(baris_terakhir[1]).isdigit() else 0
+                digi_db = int(baris_terakhir[2]) if str(baris_terakhir[2]).isdigit() else 0
+                return waktu_db, cash_db, digi_db
+        except:
+            pass
+    waktu_default = datetime.now(pytz.timezone('Asia/Jakarta')).strftime("%Y-%m-%d %H:%M:%S")
+    return waktu_default, 0, 0
 
-if 'modal_cash' not in st.session_state or 'modal_digi' not in st.session_state:
-    c_awal, d_awal = ambil_modal_terakhir()
-    st.session_state['modal_cash'] = c_awal
-    st.session_state['modal_digi'] = d_awal
+waktu_mulai_db, modal_cash_db, modal_digi_db = load_session_state()
+
+if 'waktu_mulai_sesi' not in st.session_state:
+    st.session_state['waktu_mulai_sesi'] = waktu_mulai_db
+if 'modal_cash' not in st.session_state:
+    st.session_state['modal_cash'] = modal_cash_db
+if 'modal_digi' not in st.session_state:
+    st.session_state['modal_digi'] = modal_digi_db
 
 if 'penyesuaian_cash' not in st.session_state: st.session_state['penyesuaian_cash'] = 0
 if 'penyesuaian_digi' not in st.session_state: st.session_state['penyesuaian_digi'] = 0
 if 'draf_scan_smart' not in st.session_state: st.session_state['draf_scan_smart'] = []
 if 'keranjang_belanja' not in st.session_state: st.session_state['keranjang_belanja'] = []
-if 'waktu_mulai_sesi' not in st.session_state:
-    st.session_state['waktu_mulai_sesi'] = datetime.now(pytz.timezone('Asia/Jakarta')).strftime("%Y-%m-%d %H:%M:%S")
 
 def hitung_admin(nominal, jenis):
     if jenis == "E-Wallet" and nominal <= 1500000:
@@ -665,25 +675,19 @@ with tab3:
             akhir_d = st.session_state['modal_digi'] + tot_digi_s + st.session_state['penyesuaian_digi']
             waktu_tutup = datetime.now(pytz.timezone('Asia/Jakarta')).strftime("%Y-%m-%d %H:%M:%S")
 
-            # Inisialisasi aman sheet riwayat sesi
-            target_ws_sesi = ws_sesi
-            if not target_ws_sesi and sh_master:
-                nama_sheet_asli = mapping_cabang.get(st.session_state['cabang_terpilih'], "Pusat")
-                s_sesi_nama = f"RiwayatSesi_{nama_sheet_asli}"
+            # Simpan ke riwayat sesi
+            if ws_sesi:
                 try:
-                    target_ws_sesi = sh_master.worksheet(s_sesi_nama)
+                    ws_sesi.append_row([waktu_tutup, st.session_state['modal_cash'], st.session_state['modal_digi'], akhir_c, akhir_d, prof_s])
                 except:
-                    try:
-                        target_ws_sesi = sh_master.add_worksheet(title=s_sesi_nama, rows=1000, cols=6)
-                        target_ws_sesi.append_row(["Waktu_Tutup_Sesi", "Modal_Cash", "Modal_Digital", "Total_Cash_Akhir", "Total_Digital_Akhir", "Total_Profit"])
-                    except:
-                        target_ws_sesi = None
+                    pass
 
-            if target_ws_sesi:
+            # Reset sesi baru di database Kas_Harian agar tetap tersinkron
+            if ws_k:
                 try:
-                    target_ws_sesi.append_row([waktu_tutup, st.session_state['modal_cash'], st.session_state['modal_digi'], akhir_c, akhir_d, prof_s])
-                except Exception as e:
-                    st.error(f"Gagal simpan arsip sesi: {e}")
+                    ws_k.append_row([waktu_tutup, 0, 0])
+                except:
+                    pass
 
             st.session_state['modal_cash'] = 0
             st.session_state['modal_digi'] = 0
@@ -807,15 +811,9 @@ with tab3:
     st.markdown("---")
     st.markdown("### 📜 Riwayat Sesi Kerja Sebelumnya")
     
-    active_ws_sesi = ws_sesi
-    if not active_ws_sesi and sh_master:
-        nama_sheet_asli = mapping_cabang.get(st.session_state['cabang_terpilih'], "Pusat")
-        try: active_ws_sesi = sh_master.worksheet(f"RiwayatSesi_{nama_sheet_asli}")
-        except: pass
-
-    if active_ws_sesi:
+    if ws_sesi:
         try:
-            data_sesi_all = active_ws_sesi.get_all_values()
+            data_sesi_all = ws_sesi.get_all_values()
             if len(data_sesi_all) > 1:
                 df_riwayat_sesi = pd.DataFrame(data_sesi_all[1:], columns=data_sesi_all[0])
                 
@@ -918,7 +916,7 @@ with tab4:
                         st.success("Stok dihapus!")
                         st.session_state[f"konfirm_stk_{b_stok}"] = False
                         st.rerun()
-                    if cs_n.button("Batal", key=f"n_stk_{b_stok}"):
+                    if cs_n.button("Batal", key=f"n_stk_{b_stok}合作"):
                         st.session_state[f"konfirm_stk_{b_stok}"] = False
                         st.rerun()
 
