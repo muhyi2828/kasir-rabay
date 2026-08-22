@@ -44,17 +44,13 @@ st.markdown("""
     .main .block-container { padding-bottom: 90px; }
     .login-box { background-color: #111; padding: 30px; border-radius: 12px; border: 1px solid #14B8A6; margin-top: 50px; text-align: center; }
     
-    /* PAKSA FORMAT KOLOM STRUKTUR KASIR SEJAJAR 1 BARIS DI HP */
-    div[data-testid="column"] {
-        width: auto !important;
-        flex: 1 1 auto !important;
-        min-width: 0px !important;
-    }
+    /* PAKSA FORMAT KOLOM SEJAJAR 1 BARIS DI HP TANPA MERUSAK RASIO 30:70 */
     div[data-testid="stHorizontalBlock"] {
-        display: flex !important;
         flex-direction: row !important;
         flex-wrap: nowrap !important;
-        gap: 8px !important;
+    }
+    div[data-testid="column"] {
+        min-width: 0 !important; /* Mematikan paksaan Streamlit yang membuat kolom jadi 100% di HP */
     }
     </style>
 """, unsafe_allow_html=True)
@@ -945,12 +941,6 @@ with tab4:
             kat = row['Kategori'] if row['Kategori'] else "Umum"
             
             st.markdown(f"**{nm}** | <span style='color:#14B8A6;'>[{kat}]</span> (Stok: {stk})<br>Modal: {h_modal} | Jual: {h_jual}<br>Barcode: {bc}", unsafe_allow_html=True)
-            
-            # SUSUNAN MANDATARIS BEBAS PENGALAMAN STREAMLIT LAMA
-            st.markdown(f"""
-                <div style="display: flex; gap: 8px; width: 100%; margin-top: 5px; margin-bottom: 10px;">
-                    <div style="flex: 30%;">
-            """, unsafe_allow_html=True)
             
             col_stk1, col_stk2 = st.columns([3, 7])
             with col_stk1:
