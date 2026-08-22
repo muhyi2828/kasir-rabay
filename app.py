@@ -44,9 +44,16 @@ st.markdown("""
     .main .block-container { padding-bottom: 90px; }
     .login-box { background-color: #111; padding: 30px; border-radius: 12px; border: 1px solid #14B8A6; margin-top: 50px; text-align: center; }
     
-    /* PAKSA TOMBOL KASIR/AKSI TETAP 1 BARIS DI LAYAR HP */
-    [data-testid="stHorizontalBlock"] {
+    /* PAKSA FORMAT KOLOM STRUKTUR KASIR SEJAJAR 1 BARIS DI HP */
+    div[data-testid="column"] {
+        width: auto !important;
+        flex: 1 1 auto !important;
+        min-width: 0px !important;
+    }
+    div[data-testid="stHorizontalBlock"] {
+        display: flex !important;
         flex-direction: row !important;
+        flex-wrap: nowrap !important;
         gap: 8px !important;
     }
     </style>
@@ -252,6 +259,7 @@ if 'draf_scan_smart' not in st.session_state: st.session_state['draf_scan_smart'
 if 'keranjang_belanja' not in st.session_state: st.session_state['keranjang_belanja'] = []
 if 'is_submitting' not in st.session_state: st.session_state['is_submitting'] = False
 
+# --- FUNGSI HITUNG ADMIN BARU BERDASARKAN GAMBAR MATRIKS DATES ---
 def hitung_admin(nominal, jenis):
     if jenis == "E-Wallet" and nominal <= 1500000:
         if nominal <= 98000: return 2000
@@ -261,16 +269,16 @@ def hitung_admin(nominal, jenis):
         elif nominal <= 1000000: return 8000
         else: return 10000
     elif jenis == "Tarik Tunai":
-        if nominal <= 300000: return 3000
-        elif nominal <= 1000000: return 5000
-        elif nominal <= 2000000: return 8000
-        elif nominal <= 3000000: return 10000
-        elif nominal <= 5000000: return 15000
-        elif nominal <= 7000000: return 20000
-        elif nominal <= 10000000: return 25000
-        elif nominal <= 15000000: return 30000
-        elif nominal <= 20000000: return 35000
-        else: return 35000 + (-(-(nominal - 20000000) // 5000000) * 5000)
+        if nominal <= 303000: return 3000
+        elif nominal <= 1005000: return 5000
+        elif nominal <= 2008000: return 8000
+        elif nominal <= 3010000: return 10000
+        elif nominal <= 5015000: return 15000
+        elif nominal <= 7020000: return 20000
+        elif nominal <= 10025000: return 25000
+        elif nominal <= 15030000: return 30000
+        elif nominal <= 20035000: return 35000
+        else: return 35000 + (-(-(nominal - 20035000) // 5000000) * 5000)
     else: 
         if nominal <= 98000: return 3000
         elif nominal <= 400000: return 5000
@@ -938,7 +946,12 @@ with tab4:
             
             st.markdown(f"**{nm}** | <span style='color:#14B8A6;'>[{kat}]</span> (Stok: {stk})<br>Modal: {h_modal} | Jual: {h_jual}<br>Barcode: {bc}", unsafe_allow_html=True)
             
-            # SEJALAN 1 BARIS (30% DAN 70%)
+            # SUSUNAN MANDATARIS BEBAS PENGALAMAN STREAMLIT LAMA
+            st.markdown(f"""
+                <div style="display: flex; gap: 8px; width: 100%; margin-top: 5px; margin-bottom: 10px;">
+                    <div style="flex: 30%;">
+            """, unsafe_allow_html=True)
+            
             col_stk1, col_stk2 = st.columns([3, 7])
             with col_stk1:
                 if st.button("❌ Hapus", key=f"del_stk_{b_stok}", use_container_width=True): st.session_state[f"konfirm_stk_{b_stok}"] = True
