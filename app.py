@@ -18,10 +18,7 @@ st.set_page_config(page_title="RABAY CELL PRO", layout="centered", page_icon="�
 # --- CUSTOM CSS UI MODERN DARK MODE, FLOATING BUTTON & ANIMASI GOOGLE LENS ---
 st.markdown("""
     <style>
-    /* Paksa Background Gelap */
     .stApp { background-color: #050505; color: #ffffff; }
-    
-    /* Header Kustom */
     .rabay-header {
         background-color: #14B8A6;
         padding: 15px 20px;
@@ -34,74 +31,18 @@ st.markdown("""
         margin-right: -1rem;
     }
     .rabay-header h1 { color: white; margin: 0; font-size: 28px; font-weight: 800; font-family: sans-serif; letter-spacing: 1px;}
-    
-    /* Styling Tabs */
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 10px;
-        background-color: transparent;
-        overflow-x: auto;
-    }
-    .stTabs [data-baseweb="tab"] {
-        border-radius: 4px !important;
-        color: #cccccc !important;
-        background-color: transparent !important;
-        padding: 10px 15px !important;
-        font-weight: 600 !important;
-        white-space: nowrap;
-    }
-    .stTabs [aria-selected="true"] {
-        background-color: #14B8A6 !important;
-        color: white !important;
-    }
-    
-    /* Styling Input Box & Container */
-    div[data-baseweb="input"] {
-        background-color: #1E1E1E !important;
-        border-radius: 8px !important;
-        border: 1px solid #14B8A6 !important;
-    }
+    .stTabs [data-baseweb="tab-list"] { gap: 10px; background-color: transparent; overflow-x: auto; }
+    .stTabs [data-baseweb="tab"] { border-radius: 4px !important; color: #cccccc !important; background-color: transparent !important; padding: 10px 15px !important; font-weight: 600 !important; white-space: nowrap; }
+    .stTabs [aria-selected="true"] { background-color: #14B8A6 !important; color: white !important; }
+    div[data-baseweb="input"] { background-color: #1E1E1E !important; border-radius: 8px !important; border: 1px solid #14B8A6 !important; }
     input { color: #14B8A6 !important; font-weight: bold !important; text-align: center !important; font-size: 18px !important;}
-    
-    /* Barcode Box Area */
-    .barcode-box {
-        margin-bottom: 20px;
-        margin-top: 10px;
-    }
-    
-    /* Sembunyikan Label Default */
+    .barcode-box { margin-bottom: 20px; margin-top: 10px; }
     label, .stRadio label { color: #cccccc !important; }
-    
-    /* Kartu Metrik Dashboard (Dark Mode) */
     .metric-card-blue { background-color: #1E1E1E; padding: 20px; border-radius: 12px; border-left: 5px solid #14B8A6; margin-bottom: 15px; }
     .metric-card-green { background-color: #1E1E1E; padding: 20px; border-radius: 12px; border-left: 5px solid #2ca02c; margin-bottom: 15px; }
-    
-    /* Tombol Floating Melayang di Bagian Bawah Layar */
-    .floating-container {
-        position: fixed;
-        bottom: 0;
-        left: 0;
-        right: 0;
-        background-color: rgba(5, 5, 5, 0.95);
-        padding: 12px 16px;
-        z-index: 99999;
-        border-top: 1px solid #222;
-        box-shadow: 0 -4px 10px rgba(0,0,0,0.8);
-    }
-    
-    /* Berijarak bawah pada konten agar tidak tertutup tombol floating */
-    .main .block-container {
-        padding-bottom: 90px;
-    }
-
-    /* Login Box */
-    .login-box {
-        background-color: #111;
-        padding: 30px;
-        border-radius: 12px;
-        border: 1px solid #14B8A6;
-        margin-top: 50px;
-        text-align: center;
-    }
+    .floating-container { position: fixed; bottom: 0; left: 0; right: 0; background-color: rgba(5, 5, 5, 0.95); padding: 12px 16px; z-index: 99999; border-top: 1px solid #222; box-shadow: 0 -4px 10px rgba(0,0,0,0.8); }
+    .main .block-container { padding-bottom: 90px; }
+    .login-box { background-color: #111; padding: 30px; border-radius: 12px; border: 1px solid #14B8A6; margin-top: 50px; text-align: center; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -166,10 +107,8 @@ if 'cabang_terpilih' not in st.session_state:
 if not st.session_state['is_logged_in']:
     st.markdown('<div class="login-box">', unsafe_allow_html=True)
     st.markdown("<h2 style='color: #14B8A6; margin-bottom: 20px;'>LOGIN MASTER<br>RABAY CELL</h2>", unsafe_allow_html=True)
-    
     input_user = st.text_input("Username:")
     input_pass = st.text_input("Password:", type="password")
-    
     st.markdown("<br>", unsafe_allow_html=True)
     if st.button("🚀 MASUK SISTEM", type="primary", use_container_width=True):
         if input_user == db_user and input_pass == db_pass:
@@ -296,6 +235,7 @@ if 'penyesuaian_cash' not in st.session_state: st.session_state['penyesuaian_cas
 if 'penyesuaian_digi' not in st.session_state: st.session_state['penyesuaian_digi'] = 0
 if 'draf_scan_smart' not in st.session_state: st.session_state['draf_scan_smart'] = []
 if 'keranjang_belanja' not in st.session_state: st.session_state['keranjang_belanja'] = []
+if 'is_submitting' not in st.session_state: st.session_state['is_submitting'] = False
 
 def hitung_admin(nominal, jenis):
     if jenis == "E-Wallet" and nominal <= 1500000:
@@ -356,13 +296,11 @@ with tab1:
             if len(data_s) > 1:
                 df_s_check = pd.DataFrame(data_s[1:])
                 df_s_check['Row_Idx'] = range(2, len(df_s_check) + 2)
-                
                 match_barang = df_s_check[(df_s_check[5].str.upper() == code) | (df_s_check[0].str.upper() == code)]
                 if not match_barang.empty:
                     namabarang = match_barang.iloc[0][1]
                     hargamodal = int(match_barang.iloc[0][3])
                     hargajual = int(match_barang.iloc[0][4])
-                    
                     profit_item = hargajual - hargamodal
                     nama_brg_det = namabarang
                     row_brg_det = int(match_barang.iloc[0]['Row_Idx'])
@@ -424,7 +362,8 @@ with tab1:
             st.markdown('<div class="floating-container">', unsafe_allow_html=True)
             col_b1, col_b2 = st.columns(2)
             with col_b1:
-                if st.button("💾 SIMPAN LANGSUNG", type="primary", use_container_width=True):
+                if st.button("💾 SIMPAN LANGSUNG", type="primary", use_container_width=True, disabled=st.session_state['is_submitting']):
+                    st.session_state['is_submitting'] = True
                     waktu = datetime.now(pytz.timezone('Asia/Jakarta')).strftime("%Y-%m-%d %H:%M:%S")
                     if jenis_terpilih == "Penjualan Barang" and ws_s and row_brg_det:
                         stok_skrg = int(data_s[row_brg_det - 1][2]) if str(data_s[row_brg_det - 1][2]).isdigit() else 0
@@ -432,10 +371,13 @@ with tab1:
                     
                     if safe_append(ws_t, [waktu, jenis_terpilih, int(nominal_trx), int(admin), int(total_uang), int(profit_bersih)]):
                         st.cache_data.clear()
+                        st.session_state['is_submitting'] = False
                         st.success("Tersimpan!")
                         time.sleep(0.5)
                         st.rerun()
-                    else: st.error("Gagal simpan ke server!")
+                    else:
+                        st.session_state['is_submitting'] = False
+                        st.error("Gagal simpan ke server!")
 
             with col_b2:
                 if st.button("🛒 MASUK KERANJANG", use_container_width=True):
@@ -460,7 +402,8 @@ with tab1:
             st.info(f"💵 Total Tagihan: **{f_uang(total_belanja)}**")
             
             c_k1, c_k2 = st.columns(2)
-            if c_k1.button("🚀 PROSES SEMUA", type="primary", use_container_width=True):
+            if c_k1.button("🚀 PROSES SEMUA", type="primary", use_container_width=True, disabled=st.session_state['is_submitting']):
+                st.session_state['is_submitting'] = True
                 waktu = datetime.now(pytz.timezone('Asia/Jakarta')).strftime("%Y-%m-%d %H:%M:%S")
                 berhasil = True
                 for item in st.session_state['keranjang_belanja']:
@@ -470,6 +413,7 @@ with tab1:
                         if stok_skrg > 0: safe_update_cell(ws_s, r_stok, 3, stok_skrg - 1)
                     if not safe_append(ws_t, [waktu, j_trx, int(nom_trx), int(adm_trx), int(tot_trx), int(adm_trx)]): berhasil = False
                 
+                st.session_state['is_submitting'] = False
                 if berhasil:
                     st.session_state['keranjang_belanja'] = []
                     st.cache_data.clear()
@@ -557,7 +501,8 @@ with tab1:
                 st.rerun()
 
             st.markdown('<div class="floating-container">', unsafe_allow_html=True)
-            if st.button("💾 SIMPAN SEMUA TRANSAKSI OCR", type="primary", use_container_width=True):
+            if st.button("💾 SIMPAN SEMUA TRANSAKSI OCR", type="primary", use_container_width=True, disabled=st.session_state['is_submitting']):
+                st.session_state['is_submitting'] = True
                 waktu = datetime.now(pytz.timezone('Asia/Jakarta')).strftime("%Y-%m-%d %H:%M:%S")
                 berhasil = True
                 for i, item in enumerate(st.session_state['draf_scan_smart']):
@@ -566,7 +511,8 @@ with tab1:
                     admin = hitung_admin(nom, jenis)
                     total = nom - admin if jenis == "Tarik Tunai" else nom + admin
                     if not safe_append(ws_t, [waktu, jenis, int(nom), int(admin), int(total), int(admin)]): berhasil = False
-                    
+                
+                st.session_state['is_submitting'] = False
                 if berhasil:
                     st.session_state['draf_scan_smart'] = []
                     st.cache_data.clear()
@@ -576,25 +522,26 @@ with tab1:
                 else: st.error("Sebagian data gagal disimpan!")
             st.markdown('</div>', unsafe_allow_html=True)
 
-# --- TAB 2: RIWAYAT (DENGAN FILTER SESI) ---
+# --- TAB 2: RIWAYAT (DENGAN ISOLASI PRESISI RENTANG WAKTU SESI) ---
 with tab2:
     if data_t and len(data_t) > 1:
         df_t = pd.DataFrame(data_t[1:], columns=data_t[0])
         df_t['No_Baris'] = range(2, len(df_t) + 2)
         df_t['Waktu_Parsed'] = pd.to_datetime(df_t.iloc[:, 0], errors='coerce')
         
-        # Buat Daftar Sesi dari RiwayatSesi Database
+        # Buat Daftar Sesi & Rentang Waktu yang Presisi
         daftar_pilihan_sesi = ["Sesi Aktif Saat Ini"]
         rentang_sesi_dict = {}
         
         if data_sesi and len(data_sesi) > 1:
             for i in range(1, len(data_sesi)):
-                waktu_tutup_s = data_sesi[i][0]
-                # Cari waktu mulai sesi dari baris sebelumnya atau kas harian
-                waktu_mulai_s = data_sesi[i-1][0] if i > 1 else str(df_t['Waktu_Parsed'].min())
-                label_s = f"Sesi Selesai: {waktu_tutup_s}"
+                w_tutup_str = data_sesi[i][0]
+                # Waktu mulai sesi diambil tepat setelah sesi sebelumnya ditutup
+                w_mulai_str = data_sesi[i-1][0] if i > 1 else str(data_k[1][0] if len(data_k) > 1 else df_t['Waktu_Parsed'].min())
+                
+                label_s = f"Sesi Selesai: {w_tutup_str}"
                 daftar_pilihan_sesi.append(label_s)
-                rentang_sesi_dict[label_s] = (pd.to_datetime(waktu_mulai_s), pd.to_datetime(waktu_tutup_s))
+                rentang_sesi_dict[label_s] = (pd.to_datetime(w_mulai_str), pd.to_datetime(w_tutup_str))
 
         col_f1, col_f2 = st.columns(2)
         with col_f1:
@@ -605,13 +552,13 @@ with tab2:
         
         df_t_filtered = df_t.copy()
         
-        # Filter Berdasarkan Sesi yang Dipilih
+        # Isolasi Waktu Sesi (Strict Boundary > Mulai Dan <= Tutup)
         if pilih_filter_sesi == "Sesi Aktif Saat Ini":
             t_mulai_aktif = pd.to_datetime(st.session_state['waktu_mulai_sesi'])
-            df_t_filtered = df_t_filtered[df_t_filtered['Waktu_Parsed'] >= t_mulai_aktif]
+            df_t_filtered = df_t_filtered[df_t_filtered['Waktu_Parsed'] > t_mulai_aktif]
         else:
             w_mulai, w_tutup = rentang_sesi_dict[pilih_filter_sesi]
-            df_t_filtered = df_t_filtered[(df_t_filtered['Waktu_Parsed'] >= w_mulai) & (df_t_filtered['Waktu_Parsed'] <= w_tutup)]
+            df_t_filtered = df_t_filtered[(df_t_filtered['Waktu_Parsed'] > w_mulai) & (df_t_filtered['Waktu_Parsed'] <= w_tutup)]
 
         if pilih_filter_jenis != "Semua": 
             df_t_filtered = df_t_filtered[df_t_filtered[kolom_jenis] == pilih_filter_jenis]
@@ -706,7 +653,8 @@ with tab3:
     if st.session_state.get('konfirmasi_tutup_sesi', False):
         st.warning("⚠️ Apakah Anda yakin ingin mengakhiri sesi ini? Semua kalkulasi kas dan profit sesi ini akan ditutup dan diarsipkan.")
         col_ks1, col_ks2 = st.columns(2)
-        if col_ks1.button("✅ Ya, Tutup Sesi", type="primary", use_container_width=True):
+        if col_ks1.button("✅ Ya, Tutup Sesi", type="primary", use_container_width=True, disabled=st.session_state['is_submitting']):
+            st.session_state['is_submitting'] = True
             tot_cash_s = 0
             tot_digi_s = 0
             prof_s = 0
@@ -715,7 +663,7 @@ with tab3:
                 df_t_all = pd.DataFrame(data_t[1:])
                 df_t_all['Waktu_Parsed'] = pd.to_datetime(df_t_all.iloc[:, 0], errors='coerce')
                 t_mulai = pd.to_datetime(st.session_state['waktu_mulai_sesi'])
-                df_sesi_ini = df_t_all[df_t_all['Waktu_Parsed'] >= t_mulai].copy()
+                df_sesi_ini = df_t_all[df_t_all['Waktu_Parsed'] > t_mulai].copy()
                 
                 if not df_sesi_ini.empty:
                     prof_s = pd.to_numeric(df_sesi_ini.iloc[:, 5], errors='coerce').fillna(0).sum()
@@ -743,6 +691,7 @@ with tab3:
                 b_sesi = safe_append(target_ws_sesi, [waktu_tutup, int(st.session_state['modal_cash']), int(st.session_state['modal_digi']), akhir_c, akhir_d, int(prof_s)])
                 b_kas = safe_append(target_ws_k, [waktu_tutup, 0, 0])
 
+                st.session_state['is_submitting'] = False
                 if b_sesi and b_kas:
                     st.session_state['modal_cash'] = 0
                     st.session_state['modal_digi'] = 0
@@ -758,6 +707,7 @@ with tab3:
                 else:
                     st.error("❌ Gagal menyimpan data ke Google Sheets. Coba klik lagi.")
             except Exception as e:
+                st.session_state['is_submitting'] = False
                 st.error(f"Detail Error Server: {e}")
 
         if col_ks2.button("❌ Batal", use_container_width=True):
@@ -796,7 +746,7 @@ with tab3:
             df_trx['Waktu_Parsed'] = pd.to_datetime(df_trx.iloc[:, 0], errors='coerce')
             t_mulai_sesi = pd.to_datetime(st.session_state['waktu_mulai_sesi'])
             
-            df_sesi = df_trx[df_trx['Waktu_Parsed'] >= t_mulai_sesi].copy()
+            df_sesi = df_trx[df_trx['Waktu_Parsed'] > t_mulai_sesi].copy()
             if not df_sesi.empty:
                 profit_sesi_ini = pd.to_numeric(df_sesi.iloc[:, 5], errors='coerce').fillna(0).sum()
                 for idx, r in df_sesi.iterrows():
@@ -906,15 +856,19 @@ with tab4:
             
         kode_cepat_brg = st.text_input("Kode Cepat Barang (Contoh: SPI, VCG1):")
         
-        if st.button("💾 Simpan Barang", type="primary", use_container_width=True):
+        if st.button("💾 Simpan Barang", type="primary", use_container_width=True, disabled=st.session_state['is_submitting']):
+            st.session_state['is_submitting'] = True
             final_kat = kategori_barang if kategori_barang.strip() else "Umum"
             if nama_barang:
                 if safe_append(ws_s, [barcode_input, nama_barang, int(stok_awal), int(harga_modal), int(harga_jual), kode_cepat_brg, final_kat]):
                     st.cache_data.clear()
+                    st.session_state['is_submitting'] = False
                     st.success("Tersimpan!")
                     time.sleep(0.5)
                     st.rerun()
-                else: st.error("Gagal simpan barang!")
+                else: 
+                    st.session_state['is_submitting'] = False
+                    st.error("Gagal simpan barang!")
 
     st.markdown("---")
     if data_s and len(data_s) > 1:
