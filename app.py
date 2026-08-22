@@ -233,23 +233,28 @@ def ambil_data_transaksi(ws):
         try: return ws.get_all_values()
         except: return []
 
-# --- AMBIL DATA SESI & MODAL TERAKHIR DARI DATABASE KAS_HARIAN ---
-def load_session_state():
+# --- CARI MODAL & WAKTU SESI AKTIF TERAKHIR YANG VALID (>0) ---
+def load_valid_session():
+    waktu_default = datetime.now(pytz.timezone('Asia/Jakarta')).strftime("%Y-%m-%d %H:%M:%S")
     if ws_k:
         try:
             data_k = ws_k.get_all_values()
             if len(data_k) > 1:
+                # Telusuri dari bawah ke atas untuk mencari modal terakhir yang tidak nol (jika ada)
+                for row in reversed(data_k[1:]):
+                    if len(row) >= 3:
+                        c_val = int(row[1]) if str(row[1]).isdigit() else 0
+                        d_val = int(row[2]) if str(row[2]).isdigit() else 0
+                        if c_val > 0 or d_val > 0:
+                            return row[0], c_val, d_val
+                # Jika semua 0, ambil baris paling bawah atau baris pertama setelah header
                 baris_terakhir = data_k[-1]
-                waktu_db = baris_terakhir[0]
-                cash_db = int(baris_terakhir[1]) if str(baris_terakhir[1]).isdigit() else 0
-                digi_db = int(baris_terakhir[2]) if str(baris_terakhir[2]).isdigit() else 0
-                return waktu_db, cash_db, digi_db
+                return baris_terakhir[0], int(baris_terakhir[1]) if str(baris_terakhir[1]).isdigit() else 0, int(baris_terakhir[2]) if str(baris_terakhir[2]).isdigit() else 0
         except:
             pass
-    waktu_default = datetime.now(pytz.timezone('Asia/Jakarta')).strftime("%Y-%m-%d %H:%M:%S")
     return waktu_default, 0, 0
 
-waktu_mulai_db, modal_cash_db, modal_digi_db = load_session_state()
+waktu_mulai_db, modal_cash_db, modal_digi_db = load_valid_session()
 
 if 'waktu_mulai_sesi' not in st.session_state:
     st.session_state['waktu_mulai_sesi'] = waktu_mulai_db
@@ -675,14 +680,12 @@ with tab3:
             akhir_d = st.session_state['modal_digi'] + tot_digi_s + st.session_state['penyesuaian_digi']
             waktu_tutup = datetime.now(pytz.timezone('Asia/Jakarta')).strftime("%Y-%m-%d %H:%M:%S")
 
-            # Simpan ke riwayat sesi
             if ws_sesi:
                 try:
                     ws_sesi.append_row([waktu_tutup, st.session_state['modal_cash'], st.session_state['modal_digi'], akhir_c, akhir_d, prof_s])
                 except:
                     pass
 
-            # Reset sesi baru di database Kas_Harian agar tetap tersinkron
             if ws_k:
                 try:
                     ws_k.append_row([waktu_tutup, 0, 0])
@@ -695,7 +698,7 @@ with tab3:
             st.session_state['penyesuaian_digi'] = 0
             st.session_state['waktu_mulai_sesi'] = waktu_tutup
             st.session_state['konfirmasi_tutup_sesi'] = False
-            st.success("🎉 Sesi Berhasil Diakhiri & Diarsipkan! Kalkulasi direset ke 0 untuk sesi baru.")
+            st.success("🎉 Sesi Berhasil Diakhiri & Diarsipkan!")
             st.rerun()
 
         if col_ks2.button("❌ Batal", use_container_width=True):
@@ -732,8 +735,16 @@ with tab3:
             if len(df_trx.columns) >= 6:
                 df_trx['Waktu_Parsed'] = pd.to_datetime(df_trx.iloc[:, 0], errors='coerce')
                 t_mulai_sesi = pd.to_datetime(st.session_state['waktu_mulai_sesi'])
-                df_sesi = df_trx[df_trx['Waktu_Parsed'] >= t_mulai_sesi].copy()
                 
+                # SINKRONISASI MUTLAK: Hitung transaksi sejak waktu mulai sesi aktif, 
+                # atau jika waktu mulai sesi lebih baru dari transaksi, hitung transaksi pada hari yang sama
+                df_sesi = df_trx[df_trx['Waktu_Parsed'] >= t_mulai_sesi].copy()
+                if df_sesi.empty and not df_trx.empty:
+                    # Fallback aman: ambil transaksi hari ini agar dashboard selalu sinkron dengan riwayat harian
+                    today_str = datetime.now(pytz.timezone('Asia/Jakarta')).strftime("%Y-%m-%d")
+                    df_trx['Tgl_Saja'] = df_trx['Waktu_Parsed'].dt.strftime('%Y-%m-%d')
+                    df_sesi = df_trx[df_trx['Tgl_Saja'] == today_str].copy()
+
                 if not df_sesi.empty:
                     profit_sesi_ini = pd.to_numeric(df_sesi.iloc[:, 5], errors='coerce').fillna(0).sum()
                     for idx, r in df_sesi.iterrows():
@@ -916,7 +927,7 @@ with tab4:
                         st.success("Stok dihapus!")
                         st.session_state[f"konfirm_stk_{b_stok}"] = False
                         st.rerun()
-                    if cs_n.button("Batal", key=f"n_stk_{b_stok}合作"):
+                    if cs_n.button("Batal", key=f"n_stk_{b_stok}"):
                         st.session_state[f"konfirm_stk_{b_stok}"] = False
                         st.rerun()
 
