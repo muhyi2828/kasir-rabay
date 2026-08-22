@@ -278,11 +278,18 @@ st.markdown(f"""
 tab1, tab2, tab3, tab4, tab5 = st.tabs(["TRANSAKSI", "RIWAYAT", "DASHBOARD", "STOK BARANG", "⚙️ SETELAN"])
 
 with tab1:
+    # PERIKSA VALIDASI MODAL AWAL
+    modal_belum_diisi = (st.session_state['modal_cash'] == 0 and st.session_state['modal_digi'] == 0)
+    
+    if modal_belum_diisi:
+        st.error("⚠️ MASUKAN MODAL AWAL DULU")
+        st.info("Silakan buka Tab **DASHBOARD** lalu isi **Setel Modal Awal Sesi Ini** untuk mulai bertransaksi.")
+    
     metode = st.radio("Metode Input:", ["Ketik Manual / Barcode", "AI Scan Mutasi Foto"], horizontal=True, label_visibility="collapsed")
     
     if metode == "Ketik Manual / Barcode":
         st.markdown('<div class="barcode-box">', unsafe_allow_html=True)
-        quick = st.text_input("INPUT KODE CEPAT/BARCODE", placeholder="Ketik kode cepat / barcode", label_visibility="collapsed")
+        quick = st.text_input("INPUT KODE CEPAT/BARCODE", placeholder="Ketik kode cepat / barcode", label_visibility="collapsed", disabled=modal_belum_diisi)
         st.markdown('</div>', unsafe_allow_html=True)
         
         nama_brg_det = ""
@@ -291,7 +298,7 @@ with tab1:
         jenis_trx_manual = "Bank"
         nominal_val = 0
 
-        if quick:
+        if quick and not modal_belum_diisi:
             code = quick.upper().strip()
             if len(data_s) > 1:
                 df_s_check = pd.DataFrame(data_s[1:])
@@ -318,21 +325,21 @@ with tab1:
         pilihan_jenis = ["Bank", "E-Wallet", "Tarik Tunai", "Penjualan Barang", "Transaksi Lainnya"]
         current_idx = pilihan_jenis.index(jenis_trx_manual) if jenis_trx_manual in pilihan_jenis else 0
         
-        jenis_terpilih = st.radio("Jenis", pilihan_jenis, index=current_idx, horizontal=True, label_visibility="collapsed")
+        jenis_terpilih = st.radio("Jenis", pilihan_jenis, index=current_idx, horizontal=True, label_visibility="collapsed", disabled=modal_belum_diisi)
         
         if nama_brg_det and jenis_terpilih == "Penjualan Barang":
             st.success(f"📦 Terdeteksi: **{nama_brg_det}** | Untung: **{f_uang(profit_brg_det)}**")
 
         st.markdown("<br>", unsafe_allow_html=True)
         st.caption("Nominal / Harga (Rp):")
-        nominal_trx = st.number_input("Nominal", value=nominal_val, step=10000, label_visibility="collapsed")
+        nominal_trx = st.number_input("Nominal", value=nominal_val, step=10000, label_visibility="collapsed", disabled=modal_belum_diisi)
         if nominal_trx > 0:
             st.markdown(f"<p style='color:#14B8A6; font-size:18px; font-weight:bold;'>Format: {f_uang(nominal_trx)}</p>", unsafe_allow_html=True)
         
         profit_manual = 0
         if jenis_terpilih == "Transaksi Lainnya":
             st.caption("Keuntungan Manual (Rp):")
-            profit_manual = st.number_input("Profit", value=0, step=1000, label_visibility="collapsed")
+            profit_manual = st.number_input("Profit", value=0, step=1000, label_visibility="collapsed", disabled=modal_belum_diisi)
 
         if nominal_trx > 0 or (jenis_terpilih == "Transaksi Lainnya" and (nominal_trx > 0 or profit_manual > 0)):
             if jenis_terpilih == "Penjualan Barang":
@@ -362,7 +369,7 @@ with tab1:
             st.markdown('<div class="floating-container">', unsafe_allow_html=True)
             col_b1, col_b2 = st.columns(2)
             with col_b1:
-                if st.button("💾 SIMPAN LANGSUNG", type="primary", use_container_width=True, disabled=st.session_state['is_submitting']):
+                if st.button("💾 SIMPAN LANGSUNG", type="primary", use_container_width=True, disabled=st.session_state['is_submitting'] or modal_belum_diisi):
                     st.session_state['is_submitting'] = True
                     waktu = datetime.now(pytz.timezone('Asia/Jakarta')).strftime("%Y-%m-%d %H:%M:%S")
                     if jenis_terpilih == "Penjualan Barang" and ws_s and row_brg_det:
@@ -380,7 +387,7 @@ with tab1:
                         st.error("Gagal simpan ke server!")
 
             with col_b2:
-                if st.button("🛒 MASUK KERANJANG", use_container_width=True):
+                if st.button("🛒 MASUK KERANJANG", use_container_width=True, disabled=modal_belum_diisi):
                     st.session_state['keranjang_belanja'].append({
                         'Jenis': jenis_terpilih, 'Nama': nama_brg_det if nama_brg_det else jenis_terpilih,
                         'Nominal': int(nominal_trx), 'Admin/Profit': int(profit_bersih), 'Total': int(total_uang), 'Row_Stok': row_brg_det
@@ -402,7 +409,7 @@ with tab1:
             st.info(f"💵 Total Tagihan: **{f_uang(total_belanja)}**")
             
             c_k1, c_k2 = st.columns(2)
-            if c_k1.button("🚀 PROSES SEMUA", type="primary", use_container_width=True, disabled=st.session_state['is_submitting']):
+            if c_k1.button("🚀 PROSES SEMUA", type="primary", use_container_width=True, disabled=st.session_state['is_submitting'] or modal_belum_diisi):
                 st.session_state['is_submitting'] = True
                 waktu = datetime.now(pytz.timezone('Asia/Jakarta')).strftime("%Y-%m-%d %H:%M:%S")
                 berhasil = True
@@ -427,9 +434,9 @@ with tab1:
                 st.rerun()
 
     else: 
-        sumber_gambar = st.file_uploader("Upload Screenshot Mutasi:", type=["jpg", "jpeg", "png"])
+        sumber_gambar = st.file_uploader("Upload Screenshot Mutasi:", type=["jpg", "jpeg", "png"], disabled=modal_belum_diisi)
 
-        if sumber_gambar and st.button("🔍 AI SCAN OTOMATIS (+/-)", use_container_width=True, type="primary"):
+        if sumber_gambar and st.button("🔍 AI SCAN OTOMATIS (+/-)", use_container_width=True, type="primary", disabled=modal_belum_diisi):
             try:
                 lens_placeholder = st.empty()
                 img_temp = Image.open(sumber_gambar)
@@ -466,8 +473,8 @@ with tab1:
         if st.session_state['draf_scan_smart']:
             st.markdown("---")
             st.info(f"✨ Berhasil mendeteksi {len(st.session_state['draf_scan_smart'])} transaksi.")
-            mass_minus_choice = st.selectbox("Pilih Jenis untuk Semua Min (-)", options=["Bank", "E-Wallet", "Tarik Tunai"], key="mass_min_select")
-            if st.button("🔄 Terapkan ke Semua Min (-)", use_container_width=True):
+            mass_minus_choice = st.selectbox("Pilih Jenis untuk Semua Min (-)", options=["Bank", "E-Wallet", "Tarik Tunai"], key="mass_min_select", disabled=modal_belum_diisi)
+            if st.button("🔄 Terapkan ke Semua Min (-)", use_container_width=True, disabled=modal_belum_diisi):
                 for idx, item in enumerate(st.session_state['draf_scan_smart']):
                     if item['Tanda'] == '-':
                         item['Jenis Otomatis'] = mass_minus_choice
@@ -489,7 +496,7 @@ with tab1:
                 else:
                     pilihan_opsi_ocr = ["Bank", "E-Wallet", "Tarik Tunai"]
                     if f"ocr_jns_{i}" not in st.session_state: st.session_state[f"ocr_jns_{i}"] = item['Jenis Otomatis']
-                    jns_pilih = st.selectbox(f"Pilih Jenis Trx #{i+1}", options=pilihan_opsi_ocr, key=f"ocr_jns_{i}")
+                    jns_pilih = st.selectbox(f"Pilih Jenis Trx #{i+1}", options=pilihan_opsi_ocr, key=f"ocr_jns_{i}", disabled=modal_belum_diisi)
                     item['Jenis Otomatis'] = jns_pilih
                 
                 est_admin = hitung_admin(item['Nominal (Rp)'], jns_pilih)
@@ -501,7 +508,7 @@ with tab1:
                 st.rerun()
 
             st.markdown('<div class="floating-container">', unsafe_allow_html=True)
-            if st.button("💾 SIMPAN SEMUA TRANSAKSI OCR", type="primary", use_container_width=True, disabled=st.session_state['is_submitting']):
+            if st.button("💾 SIMPAN SEMUA TRANSAKSI OCR", type="primary", use_container_width=True, disabled=st.session_state['is_submitting'] or modal_belum_diisi):
                 st.session_state['is_submitting'] = True
                 waktu = datetime.now(pytz.timezone('Asia/Jakarta')).strftime("%Y-%m-%d %H:%M:%S")
                 berhasil = True
@@ -683,7 +690,6 @@ with tab3:
 
                 st.session_state['is_submitting'] = False
                 if b_sesi and b_kas:
-                    # PERSIAPAN STATE DAN QUERY PARAMS TAHAN REFRESH
                     st.session_state['modal_cash'] = 0
                     st.session_state['modal_digi'] = 0
                     st.session_state['penyesuaian_cash'] = 0
@@ -708,7 +714,7 @@ with tab3:
 
     st.markdown("---")
 
-    with st.expander("💰 Setel Modal Awal Sesi Ini", expanded=False):
+    with st.expander("💰 Setel Modal Awal Sesi Ini", expanded=True if (st.session_state['modal_cash'] == 0 and st.session_state['modal_digi'] == 0) else False):
         input_cash_baru = st.number_input("Setel Cash di Laci (Rp):", value=st.session_state['modal_cash'], step=50000)
         if input_cash_baru > 0: st.caption(f"👀 Terbaca: **{f_uang(input_cash_baru)}**")
             
