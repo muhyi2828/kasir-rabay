@@ -15,7 +15,7 @@ import time
 # --- KONFIGURASI HALAMAN HARUS PALING ATAS ---
 st.set_page_config(page_title="RABAY CELL PRO", layout="centered", page_icon="🚀", initial_sidebar_state="collapsed")
 
-# --- CUSTOM CSS UI MODERN DARK MODE, FLOATING BUTTON & ANIMASI GOOGLE LENS ---
+# --- CUSTOM CSS UI MODERN DARK MODE, FLOATING BUTTON & FORCE ROW ON MOBILE ---
 st.markdown("""
     <style>
     .stApp { background-color: #050505; color: #ffffff; }
@@ -43,6 +43,12 @@ st.markdown("""
     .floating-container { position: fixed; bottom: 0; left: 0; right: 0; background-color: rgba(5, 5, 5, 0.95); padding: 12px 16px; z-index: 99999; border-top: 1px solid #222; box-shadow: 0 -4px 10px rgba(0,0,0,0.8); }
     .main .block-container { padding-bottom: 90px; }
     .login-box { background-color: #111; padding: 30px; border-radius: 12px; border: 1px solid #14B8A6; margin-top: 50px; text-align: center; }
+    
+    /* PAKSA TOMBOL KASIR/AKSI TETAP 1 BARIS DI LAYAR HP */
+    [data-testid="stHorizontalBlock"] {
+        flex-direction: row !important;
+        gap: 8px !important;
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -932,7 +938,7 @@ with tab4:
             
             st.markdown(f"**{nm}** | <span style='color:#14B8A6;'>[{kat}]</span> (Stok: {stk})<br>Modal: {h_modal} | Jual: {h_jual}<br>Barcode: {bc}", unsafe_allow_html=True)
             
-            # FORMATTING DUA TOMBOL DALAM SATU BARIS (30% DAN 70%)
+            # SEJALAN 1 BARIS (30% DAN 70%)
             col_stk1, col_stk2 = st.columns([3, 7])
             with col_stk1:
                 if st.button("❌ Hapus", key=f"del_stk_{b_stok}", use_container_width=True): st.session_state[f"konfirm_stk_{b_stok}"] = True
@@ -941,7 +947,7 @@ with tab4:
             
             if st.session_state.get(f"konfirm_stk_{b_stok}", False):
                 st.error(f"Yakin ingin menghapus {nm}?")
-                cs_y, cs_n = st.columns(2)
+                cs_y, cs_n = st.columns([5, 5])
                 if cs_y.button("Ya, Hapus Stok!", key=f"y_stk_{b_stok}", type="primary"):
                     if safe_delete(ws_s, b_stok):
                         st.cache_data.clear()
