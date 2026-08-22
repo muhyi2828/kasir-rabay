@@ -346,7 +346,8 @@ with tab1:
                 if st.button("🛒 MASUK KERANJANG", use_container_width=True, disabled=modal_belum_diisi):
                     st.session_state['keranjang_belanja'].append({
                         'Jenis': jenis_terpilih, 'Nama': nama_brg_det if nama_brg_det else jenis_terpilih,
-                        'Nominal': int(nominal_trx), 'Admin/Profit': int(profit_bersih), 'Total': int(total_uang), 'Row_Stok': row_id_stok, 'Sisa_Stok': stok_sisa_brg
+                        'Nominal Satuan': int(nominal_trx), 'Admin/Profit Satuan': int(profit_bersih), 
+                        'Qty': 1, 'Row_Stok': row_id_stok, 'Sisa_Stok': stok_sisa_brg
                     })
                     st.success("Masuk keranjang!")
                     st.rerun()
@@ -355,13 +356,30 @@ with tab1:
         if st.session_state['keranjang_belanja']:
             st.markdown("---")
             st.write("### 🛒 Keranjang Belanjaan")
-            df_cart_raw = pd.DataFrame(st.session_state['keranjang_belanja'])
-            df_cart_display = df_cart_raw.copy()
-            df_cart_display['Nominal'] = df_cart_display['Nominal'].apply(lambda x: f_uang(x))
-            df_cart_display['Total'] = df_cart_display['Total'].apply(lambda x: f_uang(x))
             
-            st.dataframe(df_cart_display[['Jenis', 'Nama', 'Nominal', 'Total']], use_container_width=True, hide_index=True)
-            total_belanja = df_cart_raw['Total'].sum()
+            # TAMPILKAN DAN EDIT QTY ITEM DALAM KERANJANG
+            for idx_c, cart_item in enumerate(st.session_state['keranjang_belanja']):
+                c_nama = cart_item['Nama']
+                c_jenis = cart_item['Jenis']
+                c_satuan = cart_item['Nominal Satuan']
+                
+                st.markdown(f"**{c_nama}** (<span style='color:#14B8A6;'>{c_jenis}</span>)<br>Harga Satuan: {f_uang(c_satuan)}", unsafe_allow_html=True)
+                
+                col_q1, col_q2 = st.columns([2, 8])
+                with col_q1:
+                    new_qty = st.number_input("Qty", min_value=1, value=cart_item['Qty'], step=1, key=f"qty_cart_{idx_c}", label_visibility="collapsed")
+                    cart_item['Qty'] = new_qty
+                with col_q2:
+                    subtotal_item = (c_satuan + (cart_item['Admin/Profit Satuan'] if c_jenis == "Transaksi Lainnya" else 0)) * new_qty
+                    st.markdown(f"<p style='padding-top:6px; font-weight:bold; color:#2ca02c;'>Subtotal: {f_uang(subtotal_item)}</p>", unsafe_allow_html=True)
+                
+                st.markdown("<hr style='margin:5px 0; border-color:#333;'>", unsafe_allow_html=True)
+
+            # HITUNG TOTAL KESELURUHAN DARI SEMUA QTY
+            total_belanja = sum(
+                (item['Nominal Satuan'] + (item['Admin/Profit Satuan'] if item['Jenis'] == "Transaksi Lainnya" else 0)) * item['Qty']
+                for item in st.session_state['keranjang_belanja']
+            )
             st.info(f"💵 Total Tagihan: **{f_uang(total_belanja)}**")
             
             c_k1, c_k2 = st.columns(2)
@@ -370,18 +388,32 @@ with tab1:
                 waktu = datetime.now(pytz.timezone('Asia/Jakarta')).strftime("%Y-%m-%d %H:%M:%S")
                 berhasil = True
                 err_terakhir = ""
+                
                 for item in st.session_state['keranjang_belanja']:
-                    j_trx, nom_trx, adm_trx, tot_trx, r_stok, s_stk = item['Jenis'], item['Nominal'], item['Admin/Profit'], item['Total'], item['Row_Stok'], item['Sisa_Stok']
-                    if j_trx == "Penjualan Barang" and r_stok and s_stk > 0:
-                        db_update("stok", r_stok, {"stok": s_stk - 1})
+                    j_trx = item['Jenis']
+                    qty = item['Qty']
+                    r_stok = item['Row_Stok']
+                    s_stk = item['Sisa_Stok']
                     
-                    sukses_ins, err_ins = db_insert("transaksi", {
-                        "waktu": waktu, "jenis": j_trx, "nominal": int(nom_trx),
-                        "admin": int(adm_trx), "total": int(tot_trx), "profit": int(adm_trx)
-                    })
-                    if not sukses_ins: 
-                        berhasil = False
-                        err_terakhir = err_ins
+                    # Kurangi stok sebanyak Qty jika barang fisik
+                    if j_trx == "Penjualan Barang" and r_stok and s_stk > 0:
+                        stok_baru = max(0, s_stk - qty)
+                        db_update("stok", r_stok, {"stok": stok_baru})
+                    
+                    # Looping simpan transaksi sejumlah Qty atau masukkan total dikali qty
+                    for _ in range(qty):
+                        nom_trx = item['Nominal Satuan']
+                        adm_trx = item['Admin/Profit Satuan']
+                        tot_trx = nom_trx + adm_trx if j_trx == "Transaksi Lainnya" else (nom_trx - adm_trx if j_trx == "Tarik Tunai" else nom_trx)
+                        prof_trx = adm_trx
+                        
+                        sukses_ins, err_ins = db_insert("transaksi", {
+                            "waktu": waktu, "jenis": j_trx, "nominal": int(nom_trx),
+                            "admin": int(adm_trx), "total": int(tot_trx), "profit": int(prof_trx)
+                        })
+                        if not sukses_ins: 
+                            berhasil = False
+                            err_terakhir = err_ins
                 
                 st.session_state['is_submitting'] = False
                 if berhasil:
