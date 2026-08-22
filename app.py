@@ -575,7 +575,6 @@ with tab2:
                 if konfirm_hapus_sesi:
                     if st.button("🗑️ Hapus Transaksi Sesi Ini", type="primary"):
                         rows_to_delete = df_t_filtered['No_Baris'].tolist()
-                        # Hapus dari bawah ke atas agar indeks baris tidak bergeser
                         for r_idx in sorted(rows_to_delete, reverse=True):
                             safe_delete(ws_t, r_idx)
                         st.cache_data.clear()
@@ -638,13 +637,6 @@ with tab2:
 
 # --- TAB 3: DASHBOARD ---
 with tab3:
-    st.markdown("""
-        <div style="background-color: #1E1E1E; padding: 20px; border-radius: 12px; border: 2px solid #ff4b4b; text-align: center; margin-bottom: 25px;">
-            <h3 style="color: #ff4b4b; margin-top: 0;">🔴 MANAJEMEN SESI SHIFT</h3>
-            <p style="color: #ccc; font-size: 13px;">Menekan tombol ini akan menutup sesi kerja saat ini, menyimpan ringkasan ke database, dan mereset total kas serta profit ke 0 untuk shift berikutnya.</p>
-        </div>
-    """, unsafe_allow_html=True)
-
     if st.button("🔴 AKHIRI SESI SEKARANG", type="primary", use_container_width=True):
         st.session_state['konfirmasi_tutup_sesi'] = True
 
@@ -826,6 +818,30 @@ with tab3:
                 df_sesi_display[col] = df_sesi_display[col].apply(lambda x: f_uang(x) if str(x).isdigit() else x)
         
         st.dataframe(df_sesi_display, use_container_width=True, hide_index=True)
+
+        st.markdown("<br>", unsafe_allow_html=True)
+        with st.expander("🗑️ Hapus Baris Sesi Tertentu Dari Database"):
+            list_pilihan_sesi_hapus = []
+            map_row_sesi = {}
+            for idx_s, row_s in enumerate(data_sesi[1:], start=2):
+                label_sesi_h = f"Baris #{idx_s} | Waktu Tutup: {row_s[0]} (Profit: {f_uang(row_s[5]) if len(row_s)>5 else 'Rp 0'})"
+                list_pilihan_sesi_hapus.append(label_sesi_h)
+                map_row_sesi[label_sesi_h] = idx_s
+
+            pilihan_target_hapus = st.selectbox("Pilih Sesi Yang Ingin Dihapus:", options=list_pilihan_sesi_hapus)
+            konfirm_h_sesi_db = st.checkbox("Saya yakin ingin menghapus data riwayat sesi ini secara permanen", key="chk_del_sesi_db")
+            
+            if konfirm_h_sesi_db:
+                if st.button("❌ Hapus Sesi Dari Database", type="primary"):
+                    row_index_target = map_row_sesi[pilihan_target_hapus]
+                    if safe_delete(ws_sesi, row_index_target):
+                        st.cache_data.clear()
+                        st.success("Baris riwayat sesi berhasil dihapus!")
+                        time.sleep(0.5)
+                        st.rerun()
+                    else:
+                        st.error("Gagal menghapus baris sesi!")
+
     else: st.info("Belum ada riwayat sesi yang ditutup.")
 
 # --- TAB 4: STOK BARANG ---
