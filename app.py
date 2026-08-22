@@ -215,7 +215,6 @@ def get_branch_worksheets(sh, tampilan_cabang):
 
 ws_t, ws_k, ws_s, ws_sesi = get_branch_worksheets(sh_master, st.session_state['cabang_terpilih'])
 
-# --- FUNGSI AMBIL DATA STOK DENGAN CACHE AMAN ANTI-LIMIT API ---
 def ambil_data_stok(ws):
     if not ws: return []
     try:
@@ -665,6 +664,19 @@ with tab3:
             akhir_d = st.session_state['modal_digi'] + tot_digi_s + st.session_state['penyesuaian_digi']
             waktu_tutup = datetime.now(pytz.timezone('Asia/Jakarta')).strftime("%Y-%m-%d %H:%M:%S")
 
+            # Pastikan ws_sesi terambil/dibuat jika belum ada sebelum append
+            if not ws_sesi and sh_master:
+                nama_sheet_asli = mapping_cabang.get(st.session_state['cabang_terpilih'], "Pusat")
+                s_sesi = f"RiwayatSesi_{nama_sheet_asli}"
+                try:
+                    ws_sesi = sh_master.worksheet(s_sesi)
+                except:
+                    try:
+                        ws_sesi = sh_master.add_worksheet(title=s_sesi, rows=1000, cols=6)
+                        ws_sesi.append_row(["Waktu_Tutup_Sesi", "Modal_Cash", "Modal_Digital", "Total_Cash_Akhir", "Total_Digital_Akhir", "Total_Profit"])
+                    except:
+                        ws_sesi = None
+
             if ws_sesi:
                 ws_sesi.append_row([waktu_tutup, st.session_state['modal_cash'], st.session_state['modal_digi'], akhir_c, akhir_d, prof_s])
 
@@ -789,18 +801,29 @@ with tab3:
     # --- BAGIAN PALING BAWAH TAB DASHBOARD: RIWAYAT SESI TERSIMPAN ---
     st.markdown("---")
     st.markdown("### 📜 Riwayat Sesi Kerja Sebelumnya")
+    
+    # Ambil sheet riwayat sesi jika belum ada
+    if not ws_sesi and sh_master:
+        nama_sheet_asli = mapping_cabang.get(st.session_state['cabang_terpilih'], "Pusat")
+        s_sesi = f"RiwayatSesi_{nama_sheet_asli}"
+        try: ws_sesi = sh_master.worksheet(s_sesi)
+        except: pass
+
     if ws_sesi:
-        data_sesi_all = ws_sesi.get_all_values()
-        if len(data_sesi_all) > 1:
-            df_riwayat_sesi = pd.DataFrame(data_sesi_all[1:], columns=data_sesi_all[0])
-            
-            df_sesi_display = df_riwayat_sesi.copy()
-            for col in ['Modal_Cash', 'Modal_Digital', 'Total_Cash_Akhir', 'Total_Digital_Akhir', 'Total_Profit']:
-                if col in df_sesi_display.columns:
-                    df_sesi_display[col] = df_sesi_display[col].apply(lambda x: f_uang(x) if str(x).isdigit() else x)
-            
-            st.dataframe(df_sesi_display, use_container_width=True, hide_index=True)
-        else:
+        try:
+            data_sesi_all = ws_sesi.get_all_values()
+            if len(data_sesi_all) > 1:
+                df_riwayat_sesi = pd.DataFrame(data_sesi_all[1:], columns=data_sesi_all[0])
+                
+                df_sesi_display = df_riwayat_sesi.copy()
+                for col in ['Modal_Cash', 'Modal_Digital', 'Total_Cash_Akhir', 'Total_Digital_Akhir', 'Total_Profit']:
+                    if col in df_sesi_display.columns:
+                        df_sesi_display[col] = df_sesi_display[col].apply(lambda x: f_uang(x) if str(x).isdigit() else x)
+                
+                st.dataframe(df_sesi_display, use_container_width=True, hide_index=True)
+            else:
+                st.info("Belum ada riwayat sesi yang ditutup.")
+        except:
             st.info("Belum ada riwayat sesi yang ditutup.")
 
 # --- TAB 4: STOK BARANG ---
