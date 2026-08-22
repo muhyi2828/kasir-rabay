@@ -118,7 +118,7 @@ if not st.session_state['is_logged_in']:
     st.markdown('</div>', unsafe_allow_html=True)
     st.stop()
 
-# --- FUNGSI DATABASE SUPABASE (CRUD) ---
+# --- FUNGSI DATABASE SUPABASE (CRUD DENGAN PELACAK ERROR) ---
 cabang_aktif = st.session_state['cabang_terpilih']
 
 @st.cache_data(ttl=5)
@@ -131,22 +131,21 @@ def fetch_table_data(table_name, cabang):
         return []
 
 def db_insert(table_name, data_dict):
-    if not supabase: return False
+    if not supabase: return False, "Supabase client tidak terhubung"
     try:
         data_dict["cabang"] = cabang_aktif
         supabase.table(table_name).insert(data_dict).execute()
-        return True
+        return True, ""
     except Exception as e:
-        print(e)
-        return False
+        return False, str(e)
 
 def db_update(table_name, row_id, data_dict):
-    if not supabase: return False
+    if not supabase: return False, "Supabase client tidak terhubung"
     try:
         supabase.table(table_name).update(data_dict).eq("id", row_id).execute()
-        return True
-    except:
-        return False
+        return True, ""
+    except Exception as e:
+        return False, str(e)
 
 def db_delete(table_name, row_id):
     if not supabase: return False
@@ -171,7 +170,6 @@ if data_t is None or data_s is None or data_k is None or data_sesi is None:
 def load_valid_session(data_kas):
     waktu_default = "2020-01-01 00:00:00"
     if data_kas and len(data_kas) > 0:
-        # Urutkan berdasarkan waktu terbaru atau ambil yang terakhir
         sorted_kas = sorted(data_kas, key=lambda x: x.get('waktu', ''), reverse=False)
         row_terakhir = sorted_kas[-1]
         return row_terakhir.get('waktu', waktu_default), int(row_terakhir.get('cash', 0)), int(row_terakhir.get('digital', 0))
@@ -330,7 +328,7 @@ with tab1:
                         if stok_sisa_brg > 0:
                             db_update("stok", row_id_stok, {"stok": stok_sisa_brg - 1})
                     
-                    sukses = db_insert("transaksi", {
+                    sukses, err_msg = db_insert("transaksi", {
                         "waktu": waktu, "jenis": jenis_terpilih, "nominal": int(nominal_trx),
                         "admin": int(admin), "total": int(total_uang), "profit": int(profit_bersih)
                     })
@@ -342,7 +340,7 @@ with tab1:
                         time.sleep(0.5)
                         st.rerun()
                     else:
-                        st.error("Gagal simpan ke Supabase!")
+                        st.error(f"Gagal simpan! Error: {err_msg}")
 
             with col_b2:
                 if st.button("🛒 MASUK KERANJANG", use_container_width=True, disabled=modal_belum_diisi):
@@ -371,16 +369,19 @@ with tab1:
                 st.session_state['is_submitting'] = True
                 waktu = datetime.now(pytz.timezone('Asia/Jakarta')).strftime("%Y-%m-%d %H:%M:%S")
                 berhasil = True
+                err_terakhir = ""
                 for item in st.session_state['keranjang_belanja']:
                     j_trx, nom_trx, adm_trx, tot_trx, r_stok, s_stk = item['Jenis'], item['Nominal'], item['Admin/Profit'], item['Total'], item['Row_Stok'], item['Sisa_Stok']
                     if j_trx == "Penjualan Barang" and r_stok and s_stk > 0:
                         db_update("stok", r_stok, {"stok": s_stk - 1})
                     
-                    res_ins = db_insert("transaksi", {
+                    sukses_ins, err_ins = db_insert("transaksi", {
                         "waktu": waktu, "jenis": j_trx, "nominal": int(nom_trx),
                         "admin": int(adm_trx), "total": int(tot_trx), "profit": int(adm_trx)
                     })
-                    if not res_ins: berhasil = False
+                    if not sukses_ins: 
+                        berhasil = False
+                        err_terakhir = err_ins
                 
                 st.session_state['is_submitting'] = False
                 if berhasil:
@@ -389,7 +390,7 @@ with tab1:
                     st.success("Semua keranjang selesai diproses!")
                     time.sleep(0.5)
                     st.rerun()
-                else: st.error("Sebagian data gagal disimpan!")
+                else: st.error(f"Sebagian data gagal disimpan! Error: {err_terakhir}")
                 
             if c_k2.button("🗑️ KOSONGKAN", use_container_width=True):
                 st.session_state['keranjang_belanja'] = []
@@ -474,17 +475,20 @@ with tab1:
                 st.session_state['is_submitting'] = True
                 waktu = datetime.now(pytz.timezone('Asia/Jakarta')).strftime("%Y-%m-%d %H:%M:%S")
                 berhasil = True
+                err_terakhir = ""
                 for i, item in enumerate(st.session_state['draf_scan_smart']):
                     jenis = "Tarik Tunai" if item['Tanda'] == '+' else st.session_state.get(f"ocr_jns_{i}", item['Jenis Otomatis'])
                     nom = item['Nominal (Rp)']
                     admin = hitung_admin(nom, jenis)
                     total = nom - admin if jenis == "Tarik Tunai" else nom + admin
                     
-                    res_ins = db_insert("transaksi", {
+                    sukses_ins, err_ins = db_insert("transaksi", {
                         "waktu": waktu, "jenis": jenis, "nominal": int(nom),
                         "admin": int(admin), "total": int(total), "profit": int(admin)
                     })
-                    if not res_ins: berhasil = False
+                    if not sukses_ins: 
+                        berhasil = False
+                        err_terakhir = err_ins
                 
                 st.session_state['is_submitting'] = False
                 if berhasil:
@@ -493,7 +497,7 @@ with tab1:
                     st.success("Semua transaksi berhasil disimpan!")
                     time.sleep(0.5)
                     st.rerun()
-                else: st.error("Sebagian data gagal disimpan!")
+                else: st.error(f"Sebagian data gagal disimpan! Error: {err_terakhir}")
             st.markdown('</div>', unsafe_allow_html=True)
 
 # --- TAB 2: RIWAYAT ---
@@ -573,7 +577,7 @@ with tab2:
                         e_prof = st.number_input("Profit", value=int(row['profit']), step=1000)
                         
                         if st.form_submit_button("Simpan Perubahan"):
-                            sukses_up = db_update("transaksi", r_id, {
+                            sukses_up, _ = db_update("transaksi", r_id, {
                                 "waktu": e_waktu, "jenis": e_jenis, "nominal": int(e_nom),
                                 "admin": int(e_adm), "total": int(e_tot), "profit": int(e_prof)
                             })
@@ -640,12 +644,12 @@ with tab3:
             waktu_tutup = datetime.now(pytz.timezone('Asia/Jakarta')).strftime("%Y-%m-%d %H:%M:%S")
 
             try:
-                b_sesi = db_insert("riwayat_sesi", {
+                b_sesi, _ = db_insert("riwayat_sesi", {
                     "waktu_tutup_sesi": waktu_tutup, "modal_cash": int(st.session_state['modal_cash']),
                     "modal_digital": int(st.session_state['modal_digi']), "total_cash_akhir": akhir_c,
                     "total_digital_akhir": akhir_d, "total_profit": int(prof_s)
                 })
-                b_kas = db_insert("kas", {"waktu": waktu_tutup, "cash": 0, "digital": 0})
+                b_kas, _ = db_insert("kas", {"waktu": waktu_tutup, "cash": 0, "digital": 0})
 
                 st.session_state['is_submitting'] = False
                 if b_sesi and b_kas:
@@ -682,14 +686,15 @@ with tab3:
             
         if st.button("💾 Simpan Modal Sesi", type="primary", use_container_width=True):
             waktu = datetime.now(pytz.timezone('Asia/Jakarta')).strftime("%Y-%m-%d %H:%M:%S")
-            if db_insert("kas", {"waktu": waktu, "cash": int(input_cash_baru), "digital": int(input_digi_baru)}):
+            sukses_m, err_m = db_insert("kas", {"waktu": waktu, "cash": int(input_cash_baru), "digital": int(input_digi_baru)})
+            if sukses_m:
                 st.session_state['modal_cash'] = int(input_cash_baru)
                 st.session_state['modal_digi'] = int(input_digi_baru)
                 st.cache_data.clear()
                 st.success("Modal awal sesi diperbarui!")
                 time.sleep(0.5)
                 st.rerun()
-            else: st.error("Gagal update modal!")
+            else: st.error(f"Gagal update modal! Error: {err_m}")
 
     st.markdown("---")
 
@@ -843,7 +848,7 @@ with tab4:
             st.session_state['is_submitting'] = True
             final_kat = kategori_barang if kategori_barang.strip() else "Umum"
             if nama_barang:
-                sukses_s = db_insert("stok", {
+                sukses_s, err_s = db_insert("stok", {
                     "barcode": barcode_input, "nama_barang": nama_barang, "stok": int(stok_awal),
                     "harga_modal": int(harga_modal), "harga_jual": int(harga_jual),
                     "kode_cepat": kode_cepat_brg, "kategori": final_kat
@@ -854,7 +859,7 @@ with tab4:
                     st.success("Tersimpan!")
                     time.sleep(0.5)
                     st.rerun()
-                else: st.error("Gagal simpan barang!")
+                else: st.error(f"Gagal simpan barang! Error: {err_s}")
 
     st.markdown("---")
     if data_s and len(data_s) > 0:
@@ -906,7 +911,7 @@ with tab4:
                     
                     if st.form_submit_button("Simpan Perubahan Stok"):
                         final_es_kat = es_kat if es_kat.strip() else kat
-                        sukses_up_stk = db_update("stok", r_id, {
+                        sukses_up_stk, _ = db_update("stok", r_id, {
                             "barcode": es_bc, "nama_barang": es_nm, "stok": int(es_stk),
                             "harga_modal": int(es_mod), "harga_jual": int(es_jul),
                             "kode_cepat": es_kod, "kategori": final_es_kat
