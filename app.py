@@ -197,7 +197,7 @@ def get_branch_worksheets(sh, tampilan_cabang):
             return sh.worksheet(title)
         except:
             try:
-                time.sleep(1)
+                time.sleep(0.5)
                 ws = sh.add_worksheet(title=title, rows=1000, cols=len(headers))
                 ws.append_row(headers)
                 return ws
@@ -220,7 +220,7 @@ def ambil_data_stok(ws):
     try:
         return ws.get_all_values()
     except:
-        time.sleep(2)
+        time.sleep(1)
         try: return ws.get_all_values()
         except: return []
 
@@ -229,7 +229,7 @@ def ambil_data_transaksi(ws):
     try:
         return ws.get_all_values()
     except:
-        time.sleep(2)
+        time.sleep(1)
         try: return ws.get_all_values()
         except: return []
 
@@ -637,6 +637,7 @@ with tab3:
             tot_cash_s = 0
             tot_digi_s = 0
             prof_s = 0
+            
             if ws_t:
                 data_t_all = ambil_data_transaksi(ws_t)
                 if len(data_t_all) > 1:
@@ -664,21 +665,25 @@ with tab3:
             akhir_d = st.session_state['modal_digi'] + tot_digi_s + st.session_state['penyesuaian_digi']
             waktu_tutup = datetime.now(pytz.timezone('Asia/Jakarta')).strftime("%Y-%m-%d %H:%M:%S")
 
-            # Pastikan ws_sesi terambil/dibuat jika belum ada sebelum append
-            if not ws_sesi and sh_master:
+            # Inisialisasi aman sheet riwayat sesi
+            target_ws_sesi = ws_sesi
+            if not target_ws_sesi and sh_master:
                 nama_sheet_asli = mapping_cabang.get(st.session_state['cabang_terpilih'], "Pusat")
-                s_sesi = f"RiwayatSesi_{nama_sheet_asli}"
+                s_sesi_nama = f"RiwayatSesi_{nama_sheet_asli}"
                 try:
-                    ws_sesi = sh_master.worksheet(s_sesi)
+                    target_ws_sesi = sh_master.worksheet(s_sesi_nama)
                 except:
                     try:
-                        ws_sesi = sh_master.add_worksheet(title=s_sesi, rows=1000, cols=6)
-                        ws_sesi.append_row(["Waktu_Tutup_Sesi", "Modal_Cash", "Modal_Digital", "Total_Cash_Akhir", "Total_Digital_Akhir", "Total_Profit"])
+                        target_ws_sesi = sh_master.add_worksheet(title=s_sesi_nama, rows=1000, cols=6)
+                        target_ws_sesi.append_row(["Waktu_Tutup_Sesi", "Modal_Cash", "Modal_Digital", "Total_Cash_Akhir", "Total_Digital_Akhir", "Total_Profit"])
                     except:
-                        ws_sesi = None
+                        target_ws_sesi = None
 
-            if ws_sesi:
-                ws_sesi.append_row([waktu_tutup, st.session_state['modal_cash'], st.session_state['modal_digi'], akhir_c, akhir_d, prof_s])
+            if target_ws_sesi:
+                try:
+                    target_ws_sesi.append_row([waktu_tutup, st.session_state['modal_cash'], st.session_state['modal_digi'], akhir_c, akhir_d, prof_s])
+                except Exception as e:
+                    st.error(f"Gagal simpan arsip sesi: {e}")
 
             st.session_state['modal_cash'] = 0
             st.session_state['modal_digi'] = 0
@@ -802,16 +807,15 @@ with tab3:
     st.markdown("---")
     st.markdown("### 📜 Riwayat Sesi Kerja Sebelumnya")
     
-    # Ambil sheet riwayat sesi jika belum ada
-    if not ws_sesi and sh_master:
+    active_ws_sesi = ws_sesi
+    if not active_ws_sesi and sh_master:
         nama_sheet_asli = mapping_cabang.get(st.session_state['cabang_terpilih'], "Pusat")
-        s_sesi = f"RiwayatSesi_{nama_sheet_asli}"
-        try: ws_sesi = sh_master.worksheet(s_sesi)
+        try: active_ws_sesi = sh_master.worksheet(f"RiwayatSesi_{nama_sheet_asli}")
         except: pass
 
-    if ws_sesi:
+    if active_ws_sesi:
         try:
-            data_sesi_all = ws_sesi.get_all_values()
+            data_sesi_all = active_ws_sesi.get_all_values()
             if len(data_sesi_all) > 1:
                 df_riwayat_sesi = pd.DataFrame(data_sesi_all[1:], columns=data_sesi_all[0])
                 
