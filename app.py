@@ -184,9 +184,9 @@ if not st.session_state['is_logged_in']:
 
 # --- FUNGSI AMBIL DATABASE DENGAN PEMBUATAN SHEET OTOMATIS AMAN ---
 def get_branch_worksheets(sh, tampilan_cabang):
-    if not sh: return None, None, None
+    if not sh: return None, None, None, None
     nama_sheet_asli = mapping_cabang.get(tampilan_cabang, "Pusat")
-    s_tr, s_ks, s_st = f"Transaksi_{nama_sheet_asli}", f"Kas_Harian_{nama_sheet_asli}", f"Stok_{nama_sheet_asli}"
+    s_tr, s_ks, s_st, s_sesi = f"Transaksi_{nama_sheet_asli}", f"Kas_Harian_{nama_sheet_asli}", f"Stok_{nama_sheet_asli}", f"RiwayatSesi_{nama_sheet_asli}"
     
     def get_or_create(title, headers):
         try:
@@ -202,9 +202,10 @@ def get_branch_worksheets(sh, tampilan_cabang):
     ws_t = get_or_create(s_tr, ["Waktu", "Jenis", "Nominal", "Admin", "Total", "Profit"])
     ws_k = get_or_create(s_ks, ["Waktu", "Cash", "Digital"])
     ws_s = get_or_create(s_st, ["Barcode", "Nama_Barang", "Stok", "Harga_Modal", "Harga_Jual", "Kode_Cepat", "Kategori"])
-    return ws_t, ws_k, ws_s
+    ws_sesi = get_or_create(s_sesi, ["Waktu_Tutup_Sesi", "Modal_Cash", "Modal_Digital", "Total_Cash_Akhir", "Total_Digital_Akhir", "Total_Profit"])
+    return ws_t, ws_k, ws_s, ws_sesi
 
-ws_t, ws_k, ws_s = get_branch_worksheets(sh_master, st.session_state['cabang_terpilih'])
+ws_t, ws_k, ws_s, ws_sesi = get_branch_worksheets(sh_master, st.session_state['cabang_terpilih'])
 
 def ambil_modal_terakhir():
     if ws_k:
@@ -223,6 +224,8 @@ if 'penyesuaian_cash' not in st.session_state: st.session_state['penyesuaian_cas
 if 'penyesuaian_digi' not in st.session_state: st.session_state['penyesuaian_digi'] = 0
 if 'draf_scan_smart' not in st.session_state: st.session_state['draf_scan_smart'] = []
 if 'keranjang_belanja' not in st.session_state: st.session_state['keranjang_belanja'] = []
+if 'waktu_mulai_sesi' not in st.session_state:
+    st.session_state['waktu_mulai_sesi'] = datetime.now(pytz.timezone('Asia/Jakarta')).strftime("%Y-%m-%d %H:%M:%S")
 
 def hitung_admin(nominal, jenis):
     if jenis == "E-Wallet" and nominal <= 1500000:
@@ -590,39 +593,105 @@ with tab2:
 
 # --- TAB 3: DASHBOARD ---
 with tab3:
-    with st.expander("💰 Setel Modal Awal Hari Ini", expanded=False):
+    # --- TOMBOL AKHIRI SESI DI PALING ATAS DASHBOARD ---
+    st.markdown("""
+        <div style="background-color: #1E1E1E; padding: 20px; border-radius: 12px; border: 2px solid #ff4b4b; text-align: center; margin-bottom: 25px;">
+            <h3 style="color: #ff4b4b; margin-top: 0;">🔴 MANAJEMEN SESI SHIFT</h3>
+            <p style="color: #ccc; font-size: 13px;">Menekan tombol ini akan menutup sesi kerja saat ini, menyimpan ringkasan ke database, dan mereset total kas serta profit ke 0 untuk shift berikutnya.</p>
+        </div>
+    """, unsafe_allow_html=True)
+
+    if st.button("🔴 AKHIRI SESI SEKARANG", type="primary", use_container_width=True):
+        st.session_state['konfirmasi_tutup_sesi'] = True
+
+    if st.session_state.get('konfirmasi_tutup_sesi', False):
+        st.warning("⚠️ Apakah Anda yakin ingin mengakhiri sesi ini? Semua kalkulasi kas dan profit sesi ini akan ditutup dan diarsipkan.")
+        col_ks1, col_ks2 = st.columns(2)
+        if col_ks1.button("✅ Ya, Tutup Sesi", type="primary", use_container_width=True):
+            # Hitung kalkulasi akhir sesi sebelum direset
+            tot_cash_ s = 0
+            tot_digi_s = 0
+            prof_s = 0
+            if ws_t:
+                data_t_all = ws_t.get_all_values()
+                if len(data_t_all) > 1:
+                    df_t_all = pd.DataFrame(data_t_all[1:])
+                    df_t_all['Waktu_Parsed'] = pd.to_datetime(df_t_all.iloc[:, 0], errors='coerce')
+                    t_mulai = pd.to_datetime(st.session_state['waktu_mulai_sesi'])
+                    df_sesi_ini = df_t_all[df_t_all['Waktu_Parsed'] >= t_mulai].copy()
+                    
+                    if not df_sesi_ini.empty:
+                        prof_s = pd.to_numeric(df_sesi_ini.iloc[:, 5], errors='coerce').fillna(0).sum()
+                        for idx, r in df_sesi_ini.iterrows():
+                            jns = r.iloc[1]
+                            nom = float(r.iloc[2]) if str(r.iloc[2]).replace('.','',1).isdigit() else 0
+                            tot = float(r.iloc[4]) if str(r.iloc[4]).replace('.','',1).isdigit() else 0
+                            if jns in ["Penjualan Barang", "Transaksi Lainnya"]:
+                                tot_cash_ s += tot
+                            elif jns == "Tarik Tunai":
+                                tot_cash_s -= tot
+                                tot_digi_s += nom
+                            else: 
+                                tot_digi_s -= nom
+                                tot_cash_s += tot
+
+            akhir_c = st.session_state['modal_cash'] + tot_cash_s + st.session_state['penyesuaian_cash']
+            akhir_d = st.session_state['modal_digi'] + tot_digi_s + st.session_state['penyesuaian_digi']
+            waktu_tutup = datetime.now(pytz.timezone('Asia/Jakarta')).strftime("%Y-%m-%d %H:%M:%S")
+
+            # Simpan arsip sesi ke database
+            if ws_sesi:
+                ws_sesi.append_row([waktu_tutup, st.session_state['modal_cash'], st.session_state['modal_digi'], akhir_c, akhir_d, prof_s])
+
+            # Reset State Sesi
+            st.session_state['modal_cash'] = 0
+            st.session_state['modal_digi'] = 0
+            st.session_state['penyesuaian_cash'] = 0
+            st.session_state['penyesuaian_digi'] = 0
+            st.session_state['waktu_mulai_sesi'] = waktu_tutup
+            st.session_state['konfirmasi_tutup_sesi'] = False
+            st.success("🎉 Sesi Berhasil Diakhiri & Diarsipkan! Kalkulasi direset ke 0 untuk sesi baru.")
+            st.rerun()
+
+        if col_ks2.button("❌ Batal", use_container_width=True):
+            st.session_state['konfirmasi_tutup_sesi'] = False
+            st.rerun()
+
+    st.markdown("---")
+
+    with st.expander("💰 Setel Modal Awal Sesi Ini", expanded=False):
         input_cash_baru = st.number_input("Setel Cash di Laci (Rp):", value=st.session_state['modal_cash'], step=50000)
         if input_cash_baru > 0: st.caption(f"👀 Terbaca: **{f_uang(input_cash_baru)}**")
             
         input_digi_baru = st.number_input("Setel Saldo Digital (Rp):", value=st.session_state['modal_digi'], step=50000)
         if input_digi_baru > 0: st.caption(f"👀 Terbaca: **{f_uang(input_digi_baru)}**")
             
-        if st.button("💾 Simpan Modal Baru", type="primary", use_container_width=True):
+        if st.button("💾 Simpan Modal Sesi", type="primary", use_container_width=True):
             st.session_state['modal_cash'] = input_cash_baru
             st.session_state['modal_digi'] = input_digi_baru
             waktu = datetime.now(pytz.timezone('Asia/Jakarta')).strftime("%Y-%m-%d %H:%M:%S")
             if ws_k: ws_k.append_row([waktu, input_cash_baru, input_digi_baru]) 
-            st.success("Modal awal diperbarui!")
+            st.success("Modal awal sesi diperbarui!")
             st.rerun()
 
     st.markdown("---")
 
     tot_transaksi_cash = 0
     tot_transaksi_digi = 0
-    profit_hari_ini = 0
+    profit_sesi_ini = 0
     
     if ws_t:
         data_t = ws_t.get_all_values()
         if len(data_t) > 1:
             df_trx = pd.DataFrame(data_t[1:])
             if len(df_trx.columns) >= 6:
-                df_trx['Tanggal'] = pd.to_datetime(df_trx.iloc[:, 0], errors='coerce').dt.strftime('%Y-%m-%d')
-                tgl_hari_ini = datetime.now(pytz.timezone('Asia/Jakarta')).strftime('%Y-%m-%d')
-                df_hari_ini = df_trx[df_trx['Tanggal'] == tgl_hari_ini].copy()
+                df_trx['Waktu_Parsed'] = pd.to_datetime(df_trx.iloc[:, 0], errors='coerce')
+                t_mulai_sesi = pd.to_datetime(st.session_state['waktu_mulai_sesi'])
+                df_sesi = df_trx[df_trx['Waktu_Parsed'] >= t_mulai_sesi].copy()
                 
-                if not df_hari_ini.empty:
-                    profit_hari_ini = pd.to_numeric(df_hari_ini.iloc[:, 5], errors='coerce').fillna(0).sum()
-                    for idx, r in df_hari_ini.iterrows():
+                if not df_sesi.empty:
+                    profit_sesi_ini = pd.to_numeric(df_sesi.iloc[:, 5], errors='coerce').fillna(0).sum()
+                    for idx, r in df_sesi.iterrows():
                         jns = r.iloc[1]
                         nom = float(r.iloc[2]) if str(r.iloc[2]).replace('.','',1).isdigit() else 0
                         tot = float(r.iloc[4]) if str(r.iloc[4]).replace('.','',1).isdigit() else 0
@@ -641,7 +710,7 @@ with tab3:
 
     st.markdown(f"""
         <div class="metric-card-blue">
-            <h4 style="margin:0; color:#14B8A6;">💵 Cash di Laci</h4>
+            <h4 style="margin:0; color:#14B8A6;">💵 Cash di Laci (Sesi Aktif)</h4>
             <p style="margin:5px 0 0 0; color:#ccc; font-size:14px;">TOTAL: {f_uang(total_cash_sistem)}</p>
         </div>
     """, unsafe_allow_html=True)
@@ -659,7 +728,7 @@ with tab3:
 
     st.markdown(f"""
         <div class="metric-card-blue">
-            <h4 style="margin:0; color:#14B8A6;">💳 Saldo Digital</h4>
+            <h4 style="margin:0; color:#14B8A6;">💳 Saldo Digital (Sesi Aktif)</h4>
             <p style="margin:5px 0 0 0; color:#ccc; font-size:14px;">TOTAL: {f_uang(total_digi_sistem)}</p>
         </div>
     """, unsafe_allow_html=True)
@@ -677,12 +746,12 @@ with tab3:
 
     st.markdown(f"""
         <div class="metric-card-green">
-            <h4 style="margin:0; color:#2ca02c;">🔥 Profit Hari Ini</h4>
-            <h1 style="margin:5px 0 0 0; color:#fff;">{f_uang(profit_hari_ini)}</h1>
+            <h4 style="margin:0; color:#2ca02c;">🔥 Profit Sesi Ini</h4>
+            <h1 style="margin:5px 0 0 0; color:#fff;">{f_uang(profit_sesi_ini)}</h1>
         </div>
     """, unsafe_allow_html=True)
     
-    st.markdown("### 📈 Grafik Profit Harian")
+    st.markdown("### 📈 Grafik Profit Berdasarkan Sesi")
     if ws_t and len(data_t) > 1:
         df_trx_all = pd.DataFrame(data_t[1:])
         if len(df_trx_all.columns) >= 6:
@@ -692,6 +761,24 @@ with tab3:
             
             fig_profit = px.bar(df_profit_harian, x='Tanggal', y='Profit_Val', template="plotly_dark", color_discrete_sequence=['#14B8A6'])
             st.plotly_chart(fig_profit, use_container_width=True)
+
+    # --- BAGIAN PALING BAWAH TAB DASHBOARD: RIWAYAT SESI TERSIMPAN ---
+    st.markdown("---")
+    st.markdown("### 📜 Riwayat Sesi Kerja Sebelumnya")
+    if ws_sesi:
+        data_sesi_all = ws_sesi.get_all_values()
+        if len(data_sesi_all) > 1:
+            df_riwayat_sesi = pd.DataFrame(data_sesi_all[1:], columns=data_sesi_all[0])
+            
+            # Format tampilan uang pada tabel riwayat sesi
+            df_sesi_display = df_riwayat_sesi.copy()
+            for col in ['Modal_Cash', 'Modal_Digital', 'Total_Cash_Akhir', 'Total_Digital_Akhir', 'Total_Profit']:
+                if col in df_sesi_display.columns:
+                    df_sesi_display[col] = df_sesi_display[col].apply(lambda x: f_uang(x) if str(x).isdigit() else x)
+            
+            st.dataframe(df_sesi_display, use_container_width=True, hide_index=True)
+        else:
+            st.info("Belum ada riwayat sesi yang ditutup.")
 
 # --- TAB 4: STOK BARANG ---
 with tab4:
