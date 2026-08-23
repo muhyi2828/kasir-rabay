@@ -980,44 +980,55 @@ with tab4:
     else:
         st.info("Belum ada data stok.")
 
-# --- TAB 5: GAJI KARYAWAN (TERPISAH & TIDAK MEMPENGARUHI KAS/PROFIT) ---
+# --- TAB 5: GAJI KARYAWAN HARIAN (TERPISAH & OTOMATIS HITUNG) ---
 with tab5:
-    st.markdown("### 💰 Pencatatan Gaji Karyawan")
-    st.info("Catatan ini bersifat mandiri dan terpisah dari perhitungan kas, modal, maupun profit aplikasi.")
+    st.markdown("### 💰 Input Gaji Harian Karyawan")
+    st.info("Fitur mandiri untuk mencatat upah harian karyawan per cabang. Tidak memotong atau memengaruhi kas dan profit utama.")
     
-    with st.form("form_tambah_gaji"):
+    with st.form("form_tambah_gaji_harian"):
         nama_karyawan = st.text_input("Nama Karyawan:")
-        nominal_gaji = st.number_input("Nominal Gaji / Bonus (Rp):", min_value=0, step=50000)
-        if nominal_gaji > 0: st.caption(f"👀 Terbaca: **{f_uang(nominal_gaji)}**")
-        keterangan_gaji = st.text_input("Keterangan (Contoh: Gaji Bulanan, Bonus Lebaran):")
+        
+        col_g1, col_g2 = st.columns(2)
+        with col_g1:
+            gaji_per_hari = st.number_input("Nominal Gaji per Hari (Rp):", min_value=0, step=10000, value=50000)
+        with col_g2:
+            jumlah_hari = st.number_input("Jumlah Hari Masuk:", min_value=1, step=1, value=1)
+            
+        total_gaji_hitung = gaji_per_hari * jumlah_hari
+        if total_gaji_hitung > 0:
+            st.markdown(f"<p style='color:#14B8A6; font-size:16px; font-weight:bold;'>Total Upah Diterima: {f_uang(total_gaji_hitung)} ({jumlah_hari} hari x {f_uang(gaji_per_hari)})</p>", unsafe_allow_html=True)
+
+        keterangan_gaji = st.text_input("Keterangan Periode (Contoh: Minggu ke-1 / Absen Toko):")
         
         if st.form_submit_button("💾 Simpan Catatan Gaji"):
-            if nama_karyawan and nominal_gaji > 0:
+            if nama_karyawan and total_gaji_hitung > 0:
                 waktu_gaji = datetime.now(pytz.timezone('Asia/Jakarta')).strftime("%Y-%m-%d %H:%M:%S")
+                ket_final = f"{keterangan_gaji} ({jumlah_hari} Hari Masuk @ {f_uang(gaji_per_hari)})" if keterangan_gaji else f"{jumlah_hari} Hari Masuk @ {f_uang(gaji_per_hari)}"
+                
                 sukses_g, err_g = db_insert("gaji_karyawan", {
                     "waktu": waktu_gaji,
                     "nama_karyawan": nama_karyawan,
-                    "nominal_gaji": int(nominal_gaji),
-                    "keterangan": keterangan_gaji if keterangan_gaji else "Gaji Karyawan"
+                    "nominal_gaji": int(total_gaji_hitung),
+                    "keterangan": ket_final
                 })
                 if sukses_g:
                     st.cache_data.clear()
-                    st.success("Catatan gaji berhasil disimpan!")
+                    st.success("Catatan gaji harian berhasil disimpan!")
                     time.sleep(0.5)
                     st.rerun()
                 else:
                     st.error(f"Gagal menyimpan gaji: {err_g}")
             else:
-                st.error("Nama karyawan dan nominal gaji wajib diisi!")
+                st.error("Nama karyawan dan nominal gaji wajib diisi dengan benar!")
 
     st.markdown("---")
-    st.markdown("### 📜 Riwayat Pembayaran Gaji")
+    st.markdown("### 📜 Riwayat Pembayaran Gaji Karyawan")
     
     if data_gaji and len(data_gaji) > 0:
         df_g = pd.DataFrame(data_gaji)
         df_g_display = df_g[['waktu', 'nama_karyawan', 'nominal_gaji', 'keterangan']].copy()
         df_g_display['nominal_gaji'] = df_g_display['nominal_gaji'].apply(lambda x: f_uang(x))
-        df_g_display.columns = ['Waktu', 'Nama Karyawan', 'Nominal Gaji', 'Keterangan']
+        df_g_display.columns = ['Waktu', 'Nama Karyawan', 'Total Gaji', 'Keterangan']
         
         st.dataframe(df_g_display, use_container_width=True, hide_index=True)
         
@@ -1073,6 +1084,7 @@ with tab6:
                 try:
                     res_akun = supabase.table("pengaturan_akun").select("id").execute()
                     if res_akun.data and len(res_akun.data) > 0:
+                    
                         akun_id = res_akun.data[0]['id']
                         supabase.table("pengaturan_akun").update({"username": user_baru, "password": pass_baru}).eq("id", akun_id).execute()
                     else:
