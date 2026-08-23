@@ -980,12 +980,11 @@ with tab4:
     else:
         st.info("Belum ada data stok.")
 
-# --- TAB 5: GAJI KARYAWAN (TABEL AKTIF & TOMBOL ARSIP) ---
+# --- TAB 5: GAJI KARYAWAN (BARIS BARU & TOTAL KESELURUHAN DI BAWAH) ---
 with tab5:
     st.markdown("### 💰 Pencatatan Gaji Karyawan Cabang Ini")
-    st.info("Input gaji atau bonus harian karyawan secara bebas. Data ini mandiri dan tidak memengaruhi kas/profit toko.")
+    st.info("Setiap input akan menambahkan baris baru ke tabel. Data ini mandiri dan tidak memengaruhi kas/profit toko.")
 
-    # Filter hanya data yang statusnya 'Aktif'
     data_gaji_aktif = [g for g in data_gaji if g.get('status', 'Aktif') == 'Aktif']
     data_gaji_arsip = [g for g in data_gaji if g.get('status', 'Aktif') == 'Arsip']
 
@@ -1003,31 +1002,11 @@ with tab5:
 
         total_sementara = input_k1 + input_k2 + input_bonus
         if total_sementara > 0:
-            st.markdown(f"<p style='color:#14B8A6; font-size:16px; font-weight:bold;'>Total Gaji & Bonus: {f_uang(total_sementara)}</p>", unsafe_allow_html=True)
+            st.markdown(f"<p style='color:#14B8A6; font-size:16px; font-weight:bold;'>Total Input Ini: {f_uang(total_sementara)}</p>", unsafe_allow_html=True)
 
-        if st.form_submit_button("💾 Simpan / Perbarui Input Gaji"):
-            waktu_str = datetime.now(pytz.timezone('Asia/Jakarta')).strftime("%Y-%m-%d %H:%M:%S")
-            
-            # Jika sudah ada baris aktif, update baris tersebut. Jika belum, insert baru.
-            if data_gaji_aktif:
-                row_id_aktif = data_gaji_aktif[0]['id']
-                k1_lama = int(data_gaji_aktif[0].get('karyawan_1', 0))
-                k2_lama = int(data_gaji_aktif[0].get('karyawan_2', 0))
-                bon_lama = int(data_gaji_aktif[0].get('bonus', 0))
-                
-                k1_baru = k1_lama + int(input_k1)
-                k2_baru = k2_lama + int(input_k2)
-                bon_baru = bon_lama + int(input_bonus)
-                tot_baru = k1_baru + k2_baru + bon_baru
-                
-                db_update("gaji_karyawan", row_id_aktif, {
-                    "waktu": waktu_str,
-                    "karyawan_1": k1_baru,
-                    "karyawan_2": k2_baru,
-                    "bonus": bon_baru,
-                    "total_gaji": tot_baru
-                })
-            else:
+        if st.form_submit_button("💾 Tambah Baris Gaji Baru"):
+            if total_sementara > 0:
+                waktu_str = datetime.now(pytz.timezone('Asia/Jakarta')).strftime("%Y-%m-%d %H:%M:%S")
                 db_insert("gaji_karyawan", {
                     "waktu": waktu_str,
                     "karyawan_1": int(input_k1),
@@ -1036,11 +1015,12 @@ with tab5:
                     "total_gaji": int(total_sementara),
                     "status": "Aktif"
                 })
-            
-            st.cache_data.clear()
-            st.success("Data gaji berhasil disimpan!")
-            time.sleep(0.5)
-            st.rerun()
+                st.cache_data.clear()
+                st.success("Baris gaji baru berhasil ditambahkan!")
+                time.sleep(0.5)
+                st.rerun()
+            else:
+                st.error("Silakan isi minimal salah satu nominal gaji atau bonus!")
 
     st.markdown("---")
     st.markdown("### 📋 Tabel Gaji Berjalan (Aktif)")
@@ -1050,25 +1030,33 @@ with tab5:
         df_disp = df_GA[['waktu', 'karyawan_1', 'karyawan_2', 'bonus', 'total_gaji']].copy()
         for col in ['karyawan_1', 'karyawan_2', 'bonus', 'total_gaji']:
             df_disp[col] = df_disp[col].apply(lambda x: f_uang(x))
-        df_disp.columns = ['Waktu Update', 'Karyawan 1', 'Karyawan 2', 'Bonus', 'Total Gaji']
+        df_disp.columns = ['Waktu', 'Karyawan 1', 'Karyawan 2', 'Bonus', 'Total Gaji']
         st.dataframe(df_disp, use_container_width=True, hide_index=True)
+
+        # Hitung total keseluruhan dari semua baris aktif
+        grand_total_aktif = sum(int(r.get('total_gaji', 0)) for r in data_gaji_aktif)
+        
+        st.markdown(f"""
+            <div style="text-align: center; margin: 20px 0;">
+                <span style="color: #aaa; font-size: 14px;">TOTAL KESELURUHAN GAJI AKTIF:</span><br>
+                <span style="color: #14B8A6; font-size: 32px; font-weight: bold;">{f_uang(grand_total_aktif)}</span>
+            </div>
+        """, unsafe_allow_html=True)
 
         st.markdown("<br>", unsafe_allow_html=True)
         if st.button("📦 ARSIPKAN & RESET GAJI", type="primary", use_container_width=True):
             waktu_arsip = datetime.now(pytz.timezone('Asia/Jakarta')).strftime("%Y-%m-%d %H:%M:%S")
             for row_a in data_gaji_aktif:
-                r_id = row_a['id']
-                # Ubah status menjadi Arsip dan perbarui waktu arsipnya
-                db_update("gaji_karyawan", r_id, {
+                db_update("gaji_karyawan", row_a['id'], {
                     "status": "Arsip",
                     "waktu": waktu_arsip
                 })
             st.cache_data.clear()
-            st.success("✅ Periode gaji berhasil diarsipkan dan tabel di-reset menjadi 0!")
+            st.success("✅ Periode gaji berhasil diarsipkan dan tabel di-reset bersih!")
             time.sleep(1)
             st.rerun()
     else:
-        st.info("Belum ada data input gaji yang aktif. Silakan masukkan nominal di atas.")
+        st.info("Belum ada data input gaji. Silakan tambahkan baris melalui form di atas.")
 
     st.markdown("---")
     st.markdown("### 📜 Riwayat Arsip Gaji Sebelumnya")
