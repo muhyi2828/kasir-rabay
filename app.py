@@ -868,7 +868,6 @@ with tab4:
             if kat_val and kat_val not in existing_categories: existing_categories.append(kat_val)
 
     with st.expander("➕ Tambah Barang Baru"):
-        barcode_input = st.text_input("Nomor Barcode / Label:")
         nama_barang = st.text_input("Nama Barang:")
         opsi_kategori = existing_categories + ["+ Buat Kategori Baru..."]
         pilih_kat_tambah = st.selectbox("Pilih Kategori Barang:", options=opsi_kategori, key="sel_kat_tambah")
@@ -884,14 +883,14 @@ with tab4:
         harga_jual = st.number_input("Harga Jual (Rp):", min_value=0, step=1000)
         if harga_jual > 0: st.caption(f"👀 Terbaca: **{f_uang(harga_jual)}**")
             
-        kode_cepat_brg = st.text_input("Kode Cepat Barang (Contoh: SPI, VCG1):")
+        kode_cepat_brg = st.text_input("Kode Cepat / Barcode (Contoh: AXIS99, VCG1):")
         
         if st.button("💾 Simpan Barang", type="primary", use_container_width=True, disabled=st.session_state['is_submitting']):
             st.session_state['is_submitting'] = True
             final_kat = kategori_barang if kategori_barang.strip() else "Umum"
             if nama_barang:
                 sukses_s, err_s = db_insert("stok", {
-                    "barcode": barcode_input, "nama_barang": nama_barang, "stok": int(stok_awal),
+                    "barcode": kode_cepat_brg, "nama_barang": nama_barang, "stok": int(stok_awal),
                     "harga_modal": int(harga_modal), "harga_jual": int(harga_jual),
                     "kode_cepat": kode_cepat_brg, "kategori": final_kat
                 })
@@ -904,6 +903,22 @@ with tab4:
                 else: st.error(f"Gagal simpan barang! Error: {err_s}")
 
     st.markdown("---")
+
+    # HITUNG TOTAL MODAL SEMUA BARANG FISIK
+    total_modal_fisik_semua = 0
+    if data_s and len(data_s) > 0:
+        for item_s in data_s:
+            s_qty = int(item_s.get('stok', 0))
+            s_mod = int(item_s.get('harga_modal', 0))
+            total_modal_fisik_semua += (s_qty * s_mod)
+
+    st.markdown(f"""
+        <div style="text-align: center; margin: 10px 0 20px 0;">
+            <span style="color: #aaa; font-size: 14px; font-weight: bold;">TOTAL MODAL SEMUA BARANG FISIK:</span><br>
+            <span style="color: #14B8A6; font-size: 32px; font-weight: bold;">{f_uang(total_modal_fisik_semua)}</span>
+        </div>
+    """, unsafe_allow_html=True)
+
     if data_s and len(data_s) > 0:
         df_s = pd.DataFrame(data_s)
         list_kategori_filter = ["Semua Kategori"] + sorted(df_s['kategori'].dropna().unique().tolist())
@@ -917,19 +932,20 @@ with tab4:
         list_stok_terpilih = []
         for index, row in df_s_filtered.iterrows():
             r_id = row['id']
-            bc = row.get('barcode', '')
             nm = row.get('nama_barang', '')
-            stk = row.get('stok', 0)
-            h_modal = f_uang(row.get('harga_modal', 0))
-            h_jual = f_uang(row.get('harga_jual', 0))
+            stk = int(row.get('stok', 0))
+            mod_val = int(row.get('harga_modal', 0))
+            jul_val = int(row.get('harga_jual', 0))
             kat = row.get('kategori', 'Umum')
+            
+            total_modal_item = stk * mod_val
             
             c_chk, c_info = st.columns([1, 9])
             with c_chk:
                 is_checked_stok = st.checkbox("Pilih Stok", key=f"chk_stok_{r_id}", label_visibility="collapsed")
                 if is_checked_stok: list_stok_terpilih.append(r_id)
             with c_info:
-                st.markdown(f"**{nm}** | <span style='color:#14B8A6;'>[{kat}]</span> (Stok: {stk})<br>Modal: {h_modal} | Jual: {h_jual}<br>Barcode: {bc}", unsafe_allow_html=True)
+                st.markdown(f"**{nm}** | <span style='color:#14B8A6;'>[{kat}]</span> (Stok: {stk})<br>Modal: {f_uang(mod_val)} | Jual: {f_uang(jul_val)}<br><b style='color:#14B8A6;'>TOTAL MODAL: {f_uang(total_modal_item)}</b>", unsafe_allow_html=True)
             
             if st.button("✏️ Edit Data Barang", key=f"edit_stok_btn_{r_id}", use_container_width=True): 
                 st.session_state[f"mode_edit_stk_{r_id}"] = True
@@ -937,12 +953,11 @@ with tab4:
             if st.session_state.get(f"mode_edit_stk_{r_id}", False):
                 with st.form(key=f"form_edit_stok_{r_id}"):
                     st.write(f"Edit Data: {nm}")
-                    es_bc = st.text_input("Barcode", value=bc)
                     es_nm = st.text_input("Nama Barang", value=nm)
                     es_stk = st.number_input("Stok", value=int(stk), step=1)
-                    es_mod = st.number_input("Harga Modal", value=int(row.get('harga_modal', 0)), step=1000)
-                    es_jul = st.number_input("Harga Jual", value=int(row.get('harga_jual', 0)), step=1000)
-                    es_kod = st.text_input("Kode Cepat", value=row.get('kode_cepat', ''))
+                    es_mod = st.number_input("Harga Modal", value=int(mod_val), step=1000)
+                    es_jul = st.number_input("Harga Jual", value=int(jul_val), step=1000)
+                    es_kod = st.text_input("Kode Cepat / Barcode", value=row.get('kode_cepat', ''))
                     
                     opsi_kat_edit = existing_categories + ["+ Buat Kategori Baru..."]
                     default_kat_idx = opsi_kat_edit.index(kat) if kat in opsi_kat_edit else 0
@@ -954,7 +969,7 @@ with tab4:
                     if st.form_submit_button("Simpan Perubahan Stok"):
                         final_es_kat = es_kat if es_kat.strip() else kat
                         sukses_up_stk, _ = db_update("stok", r_id, {
-                            "barcode": es_bc, "nama_barang": es_nm, "stok": int(es_stk),
+                            "barcode": es_kod, "nama_barang": es_nm, "stok": int(es_stk),
                             "harga_modal": int(es_mod), "harga_jual": int(es_jul),
                             "kode_cepat": es_kod, "kategori": final_es_kat
                         })
