@@ -980,80 +980,117 @@ with tab4:
     else:
         st.info("Belum ada data stok.")
 
-# --- TAB 5: GAJI KARYAWAN HARIAN (TERPISAH & OTOMATIS HITUNG) ---
+# --- TAB 5: GAJI KARYAWAN (TABEL AKTIF & TOMBOL ARSIP) ---
 with tab5:
-    st.markdown("### 💰 Input Gaji Harian Karyawan")
-    st.info("Fitur mandiri untuk mencatat upah harian karyawan per cabang. Tidak memotong atau memengaruhi kas dan profit utama.")
-    
-    with st.form("form_tambah_gaji_harian"):
-        nama_karyawan = st.text_input("Nama Karyawan:")
-        
-        col_g1, col_g2 = st.columns(2)
-        with col_g1:
-            gaji_per_hari = st.number_input("Nominal Gaji per Hari (Rp):", min_value=0, step=10000, value=50000)
-        with col_g2:
-            jumlah_hari = st.number_input("Jumlah Hari Masuk:", min_value=1, step=1, value=1)
-            
-        total_gaji_hitung = gaji_per_hari * jumlah_hari
-        if total_gaji_hitung > 0:
-            st.markdown(f"<p style='color:#14B8A6; font-size:16px; font-weight:bold;'>Total Upah Diterima: {f_uang(total_gaji_hitung)} ({jumlah_hari} hari x {f_uang(gaji_per_hari)})</p>", unsafe_allow_html=True)
+    st.markdown("### 💰 Pencatatan Gaji Karyawan Cabang Ini")
+    st.info("Input gaji atau bonus harian karyawan secara bebas. Data ini mandiri dan tidak memengaruhi kas/profit toko.")
 
-        keterangan_gaji = st.text_input("Keterangan Periode (Contoh: Minggu ke-1 / Absen Toko):")
-        
-        if st.form_submit_button("💾 Simpan Catatan Gaji"):
-            if nama_karyawan and total_gaji_hitung > 0:
-                waktu_gaji = datetime.now(pytz.timezone('Asia/Jakarta')).strftime("%Y-%m-%d %H:%M:%S")
-                ket_final = f"{keterangan_gaji} ({jumlah_hari} Hari Masuk @ {f_uang(gaji_per_hari)})" if keterangan_gaji else f"{jumlah_hari} Hari Masuk @ {f_uang(gaji_per_hari)}"
+    # Filter hanya data yang statusnya 'Aktif'
+    data_gaji_aktif = [g for g in data_gaji if g.get('status', 'Aktif') == 'Aktif']
+    data_gaji_arsip = [g for g in data_gaji if g.get('status', 'Aktif') == 'Arsip']
+
+    with st.form("form_input_gaji_tabel"):
+        col_k1, col_k2 = st.columns(2)
+        with col_k1:
+            input_k1 = st.number_input("Gaji / Upah Karyawan 1 (Rp):", min_value=0, step=10000, value=0)
+            if input_k1 > 0: st.caption(f"👀 {f_uang(input_k1)}")
+        with col_k2:
+            input_k2 = st.number_input("Gaji / Upah Karyawan 2 (Rp):", min_value=0, step=10000, value=0)
+            if input_k2 > 0: st.caption(f"👀 {f_uang(input_k2)}")
+
+        input_bonus = st.number_input("Bonus / Tambahan Lainnya (Rp):", min_value=0, step=10000, value=0)
+        if input_bonus > 0: st.caption(f"👀 {f_uang(input_bonus)}")
+
+        total_sementara = input_k1 + input_k2 + input_bonus
+        if total_sementara > 0:
+            st.markdown(f"<p style='color:#14B8A6; font-size:16px; font-weight:bold;'>Total Gaji & Bonus: {f_uang(total_sementara)}</p>", unsafe_allow_html=True)
+
+        if st.form_submit_button("💾 Simpan / Perbarui Input Gaji"):
+            waktu_str = datetime.now(pytz.timezone('Asia/Jakarta')).strftime("%Y-%m-%d %H:%M:%S")
+            
+            # Jika sudah ada baris aktif, update baris tersebut. Jika belum, insert baru.
+            if data_gaji_aktif:
+                row_id_aktif = data_gaji_aktif[0]['id']
+                k1_lama = int(data_gaji_aktif[0].get('karyawan_1', 0))
+                k2_lama = int(data_gaji_aktif[0].get('karyawan_2', 0))
+                bon_lama = int(data_gaji_aktif[0].get('bonus', 0))
                 
-                sukses_g, err_g = db_insert("gaji_karyawan", {
-                    "waktu": waktu_gaji,
-                    "nama_karyawan": nama_karyawan,
-                    "nominal_gaji": int(total_gaji_hitung),
-                    "keterangan": ket_final
+                k1_baru = k1_lama + int(input_k1)
+                k2_baru = k2_lama + int(input_k2)
+                bon_baru = bon_lama + int(input_bonus)
+                tot_baru = k1_baru + k2_baru + bon_baru
+                
+                db_update("gaji_karyawan", row_id_aktif, {
+                    "waktu": waktu_str,
+                    "karyawan_1": k1_baru,
+                    "karyawan_2": k2_baru,
+                    "bonus": bon_baru,
+                    "total_gaji": tot_baru
                 })
-                if sukses_g:
-                    st.cache_data.clear()
-                    st.success("Catatan gaji harian berhasil disimpan!")
-                    time.sleep(0.5)
-                    st.rerun()
-                else:
-                    st.error(f"Gagal menyimpan gaji: {err_g}")
             else:
-                st.error("Nama karyawan dan nominal gaji wajib diisi dengan benar!")
+                db_insert("gaji_karyawan", {
+                    "waktu": waktu_str,
+                    "karyawan_1": int(input_k1),
+                    "karyawan_2": int(input_k2),
+                    "bonus": int(input_bonus),
+                    "total_gaji": int(total_sementara),
+                    "status": "Aktif"
+                })
+            
+            st.cache_data.clear()
+            st.success("Data gaji berhasil disimpan!")
+            time.sleep(0.5)
+            st.rerun()
 
     st.markdown("---")
-    st.markdown("### 📜 Riwayat Pembayaran Gaji Karyawan")
-    
-    if data_gaji and len(data_gaji) > 0:
-        df_g = pd.DataFrame(data_gaji)
-        df_g_display = df_g[['waktu', 'nama_karyawan', 'nominal_gaji', 'keterangan']].copy()
-        df_g_display['nominal_gaji'] = df_g_display['nominal_gaji'].apply(lambda x: f_uang(x))
-        df_g_display.columns = ['Waktu', 'Nama Karyawan', 'Total Gaji', 'Keterangan']
-        
-        st.dataframe(df_g_display, use_container_width=True, hide_index=True)
-        
+    st.markdown("### 📋 Tabel Gaji Berjalan (Aktif)")
+
+    if data_gaji_aktif:
+        df_GA = pd.DataFrame(data_gaji_aktif)
+        df_disp = df_GA[['waktu', 'karyawan_1', 'karyawan_2', 'bonus', 'total_gaji']].copy()
+        for col in ['karyawan_1', 'karyawan_2', 'bonus', 'total_gaji']:
+            df_disp[col] = df_disp[col].apply(lambda x: f_uang(x))
+        df_disp.columns = ['Waktu Update', 'Karyawan 1', 'Karyawan 2', 'Bonus', 'Total Gaji']
+        st.dataframe(df_disp, use_container_width=True, hide_index=True)
+
         st.markdown("<br>", unsafe_allow_html=True)
-        with st.expander("🗑️ Hapus Catatan Gaji"):
-            list_pilihan_gaji = []
-            map_id_gaji = {}
-            for g_row in data_gaji:
-                g_id = g_row.get('id')
-                label_g = f"ID: {g_id} | {g_row.get('waktu')} - {g_row.get('nama_karyawan')} ({f_uang(g_row.get('nominal_gaji', 0))})"
-                list_pilihan_gaji.append(label_g)
-                map_id_gaji[label_g] = g_id
-                
-            pilihan_target_gaji = st.selectbox("Pilih Catatan Gaji Yang Ingin Dihapus:", options=list_pilihan_gaji)
-            if st.button("❌ Hapus Catatan Gaji Terpilih", type="primary"):
-                target_g_id = map_id_gaji[pilihan_target_gaji]
-                if db_delete("gaji_karyawan", target_g_id):
+        if st.button("📦 ARSIPKAN & RESET GAJI", type="primary", use_container_width=True):
+            waktu_arsip = datetime.now(pytz.timezone('Asia/Jakarta')).strftime("%Y-%m-%d %H:%M:%S")
+            for row_a in data_gaji_aktif:
+                r_id = row_a['id']
+                # Ubah status menjadi Arsip dan perbarui waktu arsipnya
+                db_update("gaji_karyawan", r_id, {
+                    "status": "Arsip",
+                    "waktu": waktu_arsip
+                })
+            st.cache_data.clear()
+            st.success("✅ Periode gaji berhasil diarsipkan dan tabel di-reset menjadi 0!")
+            time.sleep(1)
+            st.rerun()
+    else:
+        st.info("Belum ada data input gaji yang aktif. Silakan masukkan nominal di atas.")
+
+    st.markdown("---")
+    st.markdown("### 📜 Riwayat Arsip Gaji Sebelumnya")
+    if data_gaji_arsip:
+        df_ARS = pd.DataFrame(data_gaji_arsip)
+        df_arsip_disp = df_ARS[['waktu', 'karyawan_1', 'karyawan_2', 'bonus', 'total_gaji']].copy()
+        for col in ['karyawan_1', 'karyawan_2', 'bonus', 'total_gaji']:
+            df_arsip_disp[col] = df_arsip_disp[col].apply(lambda x: f_uang(x))
+        df_arsip_disp.columns = ['Waktu Diarsipkan', 'Karyawan 1', 'Karyawan 2', 'Bonus', 'Total Gaji']
+        st.dataframe(df_arsip_disp, use_container_width=True, hide_index=True)
+
+        with st.expander("🗑️ Hapus Arsip Gaji Tertentu"):
+            map_arsip = {f"ID: {r['id']} | Waktu: {r['waktu']} (Total: {f_uang(r['total_gaji'])})": r['id'] for r in data_gaji_arsip}
+            pilih_del_arsip = st.selectbox("Pilih Arsip Gaji:", options=list(map_arsip.keys()))
+            if st.button("❌ Hapus Arsip Terpilih", type="primary"):
+                if db_delete("gaji_karyawan", map_arsip[pilih_del_arsip]):
                     st.cache_data.clear()
-                    st.success("Catatan gaji berhasil dihapus!")
+                    st.success("Arsip gaji berhasil dihapus!")
                     time.sleep(0.5)
                     st.rerun()
-                else:
-                    st.error("Gagal menghapus catatan gaji!")
     else:
-        st.info("Belum ada riwayat catatan gaji.")
+        st.info("Belum ada riwayat arsip gaji.")
 
 # --- TAB 6: SETELAN & AKUN ---
 with tab6:
@@ -1084,7 +1121,6 @@ with tab6:
                 try:
                     res_akun = supabase.table("pengaturan_akun").select("id").execute()
                     if res_akun.data and len(res_akun.data) > 0:
-                    
                         akun_id = res_akun.data[0]['id']
                         supabase.table("pengaturan_akun").update({"username": user_baru, "password": pass_baru}).eq("id", akun_id).execute()
                     else:
