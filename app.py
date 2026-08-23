@@ -161,21 +161,20 @@ with st.spinner("⏳ Sinkronisasi Database Supabase..."):
     data_s = fetch_table_data("stok", cabang_aktif)
     data_k = fetch_table_data("kas", cabang_aktif)
     data_sesi = fetch_table_data("riwayat_sesi", cabang_aktif)
+    data_gaji = fetch_table_data("gaji_karyawan", cabang_aktif)
 
-if data_t is None or data_s is None or data_k is None or data_sesi is None:
+if data_t is None or data_s is None or data_k is None or data_sesi is None or data_gaji is None:
     st.error("⚠️ Gagal terhubung ke Supabase. Periksa kembali URL dan Kunci API Anda.")
     st.stop()
 
 # SESI AKTIF BERDASARKAN RIWAYAT SESI TERAKHIR
 def load_valid_session(data_riwayat_sesi, data_kas):
     waktu_default = "2020-01-01 00:00:00"
-    # Jika ada sesi yang sudah ditutup, waktu mulai sesi aktif adalah waktu tutup sesi terakhir
     if data_riwayat_sesi and len(data_riwayat_sesi) > 0:
         sorted_sesi = sorted(data_riwayat_sesi, key=lambda x: x.get('waktu_tutup_sesi', ''), reverse=True)
         waktu_tutup_terakhir = sorted_sesi[0].get('waktu_tutup_sesi', waktu_default)
         return waktu_tutup_terakhir, 0, 0
     
-    # Fallback ke tabel kas jika belum ada riwayat sesi
     if data_kas and len(data_kas) > 0:
         sorted_kas = sorted(data_kas, key=lambda x: x.get('waktu', ''), reverse=False)
         row_terakhir = sorted_kas[-1]
@@ -235,7 +234,7 @@ st.markdown(f"""
     </div>
 """, unsafe_allow_html=True)
 
-tab1, tab2, tab3, tab4, tab5 = st.tabs(["TRANSAKSI", "RIWAYAT", "DASHBOARD", "STOK BARANG", "⚙️ SETELAN"])
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["TRANSAKSI", "RIWAYAT", "DASHBOARD", "STOK BARANG", "💰 GAJI", "⚙️ SETELAN"])
 
 with tab1:
     modal_belum_diisi = (st.session_state['modal_cash'] == 0 and st.session_state['modal_digi'] == 0)
@@ -981,8 +980,72 @@ with tab4:
     else:
         st.info("Belum ada data stok.")
 
-# --- TAB 5: SETELAN & AKUN ---
+# --- TAB 5: GAJI KARYAWAN (TERPISAH & TIDAK MEMPENGARUHI KAS/PROFIT) ---
 with tab5:
+    st.markdown("### 💰 Pencatatan Gaji Karyawan")
+    st.info("Catatan ini bersifat mandiri dan terpisah dari perhitungan kas, modal, maupun profit aplikasi.")
+    
+    with st.form("form_tambah_gaji"):
+        nama_karyawan = st.text_input("Nama Karyawan:")
+        nominal_gaji = st.number_input("Nominal Gaji / Bonus (Rp):", min_value=0, step=50000)
+        if nominal_gaji > 0: st.caption(f"👀 Terbaca: **{f_uang(nominal_gaji)}**")
+        keterangan_gaji = st.text_input("Keterangan (Contoh: Gaji Bulanan, Bonus Lebaran):")
+        
+        if st.form_submit_button("💾 Simpan Catatan Gaji"):
+            if nama_karyawan and nominal_gaji > 0:
+                waktu_gaji = datetime.now(pytz.timezone('Asia/Jakarta')).strftime("%Y-%m-%d %H:%M:%S")
+                sukses_g, err_g = db_insert("gaji_karyawan", {
+                    "waktu": waktu_gaji,
+                    "nama_karyawan": nama_karyawan,
+                    "nominal_gaji": int(nominal_gaji),
+                    "keterangan": keterangan_gaji if keterangan_gaji else "Gaji Karyawan"
+                })
+                if sukses_g:
+                    st.cache_data.clear()
+                    st.success("Catatan gaji berhasil disimpan!")
+                    time.sleep(0.5)
+                    st.rerun()
+                else:
+                    st.error(f"Gagal menyimpan gaji: {err_g}")
+            else:
+                st.error("Nama karyawan dan nominal gaji wajib diisi!")
+
+    st.markdown("---")
+    st.markdown("### 📜 Riwayat Pembayaran Gaji")
+    
+    if data_gaji and len(data_gaji) > 0:
+        df_g = pd.DataFrame(data_gaji)
+        df_g_display = df_g[['waktu', 'nama_karyawan', 'nominal_gaji', 'keterangan']].copy()
+        df_g_display['nominal_gaji'] = df_g_display['nominal_gaji'].apply(lambda x: f_uang(x))
+        df_g_display.columns = ['Waktu', 'Nama Karyawan', 'Nominal Gaji', 'Keterangan']
+        
+        st.dataframe(df_g_display, use_container_width=True, hide_index=True)
+        
+        st.markdown("<br>", unsafe_allow_html=True)
+        with st.expander("🗑️ Hapus Catatan Gaji"):
+            list_pilihan_gaji = []
+            map_id_gaji = {}
+            for g_row in data_gaji:
+                g_id = g_row.get('id')
+                label_g = f"ID: {g_id} | {g_row.get('waktu')} - {g_row.get('nama_karyawan')} ({f_uang(g_row.get('nominal_gaji', 0))})"
+                list_pilihan_gaji.append(label_g)
+                map_id_gaji[label_g] = g_id
+                
+            pilihan_target_gaji = st.selectbox("Pilih Catatan Gaji Yang Ingin Dihapus:", options=list_pilihan_gaji)
+            if st.button("❌ Hapus Catatan Gaji Terpilih", type="primary"):
+                target_g_id = map_id_gaji[pilihan_target_gaji]
+                if db_delete("gaji_karyawan", target_g_id):
+                    st.cache_data.clear()
+                    st.success("Catatan gaji berhasil dihapus!")
+                    time.sleep(0.5)
+                    st.rerun()
+                else:
+                    st.error("Gagal menghapus catatan gaji!")
+    else:
+        st.info("Belum ada riwayat catatan gaji.")
+
+# --- TAB 6: SETELAN & AKUN ---
+with tab6:
     idx_cabang_aktif = daftar_tampilan_cabang.index(st.session_state['cabang_terpilih']) if st.session_state['cabang_terpilih'] in daftar_tampilan_cabang else 0
     pilihan_pindah = st.selectbox("Ganti Akses Cabang Ke:", daftar_tampilan_cabang, index=idx_cabang_aktif)
     
