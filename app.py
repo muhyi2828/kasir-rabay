@@ -980,11 +980,8 @@ with tab4:
     else:
         st.info("Belum ada data stok.")
 
-# --- TAB 5: GAJI KARYAWAN (BARIS BARU & TOTAL KESELURUHAN DI BAWAH) ---
+# --- TAB 5: GAJI KARYAWAN ---
 with tab5:
-    st.markdown("### 💰 Pencatatan Gaji Karyawan Cabang Ini")
-    st.info("Setiap input akan menambahkan baris baru ke tabel. Data ini mandiri dan tidak memengaruhi kas/profit toko.")
-
     data_gaji_aktif = [g for g in data_gaji if g.get('status', 'Aktif') == 'Aktif']
     data_gaji_arsip = [g for g in data_gaji if g.get('status', 'Aktif') == 'Arsip']
 
@@ -1026,14 +1023,44 @@ with tab5:
     st.markdown("### 📋 Tabel Gaji Berjalan (Aktif)")
 
     if data_gaji_aktif:
-        df_GA = pd.DataFrame(data_gaji_aktif)
-        df_disp = df_GA[['waktu', 'karyawan_1', 'karyawan_2', 'bonus', 'total_gaji']].copy()
-        for col in ['karyawan_1', 'karyawan_2', 'bonus', 'total_gaji']:
-            df_disp[col] = df_disp[col].apply(lambda x: f_uang(x))
-        df_disp.columns = ['Waktu', 'Karyawan 1', 'Karyawan 2', 'Bonus', 'Total Gaji']
-        st.dataframe(df_disp, use_container_width=True, hide_index=True)
+        for idx_g, g_row in enumerate(data_gaji_aktif):
+            g_id = g_row['id']
+            w_str = g_row.get('waktu', '')
+            val_k1 = int(g_row.get('karyawan_1', 0))
+            val_k2 = int(g_row.get('karyawan_2', 0))
+            val_bon = int(g_row.get('bonus', 0))
+            val_tot = int(g_row.get('total_gaji', 0))
 
-        # Hitung total keseluruhan dari semua baris aktif
+            c_info, c_btn = st.columns([8, 2])
+            with c_info:
+                st.markdown(f"**🕒 {w_str}**<br>Karyawan 1: {f_uang(val_k1)} | Karyawan 2: {f_uang(val_k2)} | Bonus: {f_uang(val_bon)}<br><b>Total Baris: {f_uang(val_tot)}</b>", unsafe_allow_html=True)
+            with c_btn:
+                if st.button("✏️ Edit", key=f"edit_gaji_btn_{g_id}", use_container_width=True):
+                    st.session_state[f"mode_edit_gaji_{g_id}"] = True
+
+            if st.session_state.get(f"mode_edit_gaji_{g_id}", False):
+                with st.form(key=f"form_edit_gaji_row_{g_id}CURR"):
+                    st.write(f"Edit Baris Gaji ID: {g_id}")
+                    ed_k1 = st.number_input("Karyawan 1 (Rp)", value=val_k1, step=10000)
+                    ed_k2 = st.number_input("Karyawan 2 (Rp)", value=val_k2, step=10000)
+                    ed_bon = st.number_input("Bonus (Rp)", value=val_bon, step=10000)
+                    
+                    if st.form_submit_button("Simpan Perubahan"):
+                        new_tot_row = ed_k1 + ed_k2 + ed_bon
+                        db_update("gaji_karyawan", g_id, {
+                            "karyawan_1": int(ed_k1),
+                            "karyawan_2": int(ed_k2),
+                            "bonus": int(ed_bon),
+                            "total_gaji": int(new_tot_row)
+                        })
+                        st.session_state[f"mode_edit_gaji_{g_id}"] = False
+                        st.cache_data.clear()
+                        st.success("Perubahan gaji disimpan!")
+                        time.sleep(0.5)
+                        st.rerun()
+
+            st.markdown("<hr style='margin:5px 0; border-color:#333;'>", unsafe_allow_html=True)
+
         grand_total_aktif = sum(int(r.get('total_gaji', 0)) for r in data_gaji_aktif)
         
         st.markdown(f"""
@@ -1067,16 +1094,6 @@ with tab5:
             df_arsip_disp[col] = df_arsip_disp[col].apply(lambda x: f_uang(x))
         df_arsip_disp.columns = ['Waktu Diarsipkan', 'Karyawan 1', 'Karyawan 2', 'Bonus', 'Total Gaji']
         st.dataframe(df_arsip_disp, use_container_width=True, hide_index=True)
-
-        with st.expander("🗑️ Hapus Arsip Gaji Tertentu"):
-            map_arsip = {f"ID: {r['id']} | Waktu: {r['waktu']} (Total: {f_uang(r['total_gaji'])})": r['id'] for r in data_gaji_arsip}
-            pilih_del_arsip = st.selectbox("Pilih Arsip Gaji:", options=list(map_arsip.keys()))
-            if st.button("❌ Hapus Arsip Terpilih", type="primary"):
-                if db_delete("gaji_karyawan", map_arsip[pilih_del_arsip]):
-                    st.cache_data.clear()
-                    st.success("Arsip gaji berhasil dihapus!")
-                    time.sleep(0.5)
-                    st.rerun()
     else:
         st.info("Belum ada riwayat arsip gaji.")
 
