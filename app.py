@@ -21,16 +21,17 @@ st.markdown("""
     .stApp { background-color: #050505; color: #ffffff; }
     .rabay-header {
         background-color: #14B8A6;
-        padding: 15px 20px;
+        padding: 12px 15px;
         display: flex;
         justify-content: space-between;
         align-items: center;
-        margin-top: -60px;
+        margin-top: -65px;
         margin-bottom: 15px;
         margin-left: -1rem;
         margin-right: -1rem;
+        border-radius: 0px;
     }
-    .rabay-header h1 { color: white; margin: 0; font-size: 26px; font-weight: 800; font-family: sans-serif; letter-spacing: 1px;}
+    .rabay-header h1 { color: white; margin: 0; font-size: 22px; font-weight: 800; font-family: sans-serif; letter-spacing: 1px;}
     .stTabs [data-baseweb="tab-list"] { gap: 10px; background-color: transparent; overflow-x: auto; }
     .stTabs [data-baseweb="tab"] { border-radius: 4px !important; color: #cccccc !important; background-color: transparent !important; padding: 10px 15px !important; font-weight: 600 !important; white-space: nowrap; }
     .stTabs [aria-selected="true"] { background-color: #14B8A6 !important; color: white !important; }
@@ -228,16 +229,17 @@ def hitung_admin(nominal, jenis):
         elif nominal <= 10000000: return 35000
         else: return 35000 + (-(-(nominal - 10000000) // 5000000) * 5000)
 
-# --- HEADER UTAMA DENGAN TOMBOL POPUP MENU (GARIS 3) ---
-col_head1, col_head2 = st.columns([7, 1])
+# --- HEADER UTAMA DENGAN TOMBOL POPUP MENU DI DALAMNYA ---
+col_head1, col_head2 = st.columns([6, 1])
 with col_head1:
     st.markdown(f"""
-        <div style="background-color: #14B8A6; padding: 15px 20px; border-radius: 6px; margin-top: -60px; margin-bottom: 15px;">
-            <h1 style="color: white; margin: 0; font-size: 24px; font-weight: 800; font-family: sans-serif; letter-spacing: 1px;">RABAY CELL - {st.session_state['cabang_terpilih'].upper()}</h1>
+        <div class="rabay-header">
+            <h1>RABAY CELL - {st.session_state['cabang_terpilih'].upper()}</h1>
         </div>
     """, unsafe_allow_html=True)
 
 with col_head2:
+    st.markdown("<div style='margin-top: -53px;'>", unsafe_allow_html=True)
     with st.popover("≡", help="Menu Setelan"):
         st.markdown("<h3 style='text-align:center; color:#14B8A6; margin-top:0;'>PENGATURAN</h3>", unsafe_allow_html=True)
         
@@ -308,6 +310,7 @@ with col_head2:
             if "cabang" in st.query_params: del st.query_params["cabang"]
             st.cache_data.clear()
             st.rerun()
+    st.markdown("</div>", unsafe_allow_html=True)
 
 # --- TAB UTAMA (5 TAB) ---
 tab1, tab2, tab3, tab4, tab5 = st.tabs(["TRANSAKSI", "RIWAYAT", "DASHBOARD", "STOK BARANG", "💰 GAJI"])
