@@ -190,6 +190,7 @@ if 'modal_digi' not in st.session_state:
 if 'penyesuaian_cash' not in st.session_state: st.session_state['penyesuaian_cash'] = 0
 if 'penyesuaian_digi' not in st.session_state: st.session_state['penyesuaian_digi'] = 0
 if 'draf_scan_smart' not in st.session_state: st.session_state['draf_scan_smart'] = []
+if 'gambar_scan_terakhir' not in st.session_state: st.session_state['gambar_scan_terakhir'] = None
 if 'keranjang_belanja' not in st.session_state: st.session_state['keranjang_belanja'] = []
 if 'is_submitting' not in st.session_state: st.session_state['is_submitting'] = False
 
@@ -274,6 +275,7 @@ with col_head2:
             if 'modal_digi' in st.session_state: del st.session_state['modal_digi']
             st.session_state['keranjang_belanja'] = []
             st.session_state['draf_scan_smart'] = []
+            st.session_state['gambar_scan_terakhir'] = None
             st.cache_data.clear()
             st.success(f"Berhasil pindah akses ke {pilihan_pindah}!")
             st.rerun()
@@ -511,6 +513,9 @@ with tab1:
 
         if sumber_gambar and st.button("🔍 AI SCAN CATATAN VOUCHER", use_container_width=True, type="primary", disabled=modal_belum_diisi):
             try:
+                # Simpan gambar ke session state agar tetap tampil setelah proses selesai
+                st.session_state['gambar_scan_terakhir'] = sumber_gambar
+
                 img_temp = Image.open(sumber_gambar)
                 buffered = io.BytesIO()
                 img_temp.save(buffered, format="JPEG")
@@ -621,6 +626,12 @@ with tab1:
                 st.rerun()
             except Exception as e: st.error(f"Gagal scan catatan: {e}")
 
+        # TAMPILKAN GAMBAR ASLI YANG DISCAN DI ATAS DRAF HASIL OCR AGAR BISA DISINKRONKAN
+        if st.session_state.get('gambar_scan_terakhir') is not None:
+            st.markdown("---")
+            st.write("📷 **Foto Catatan Asli (Untuk Sinkronisasi):**")
+            st.image(st.session_state['gambar_scan_terakhir'], use_container_width=True)
+
         if st.session_state['draf_scan_smart']:
             st.markdown("---")
             st.info(f"✨ Berhasil membaca {len(st.session_state['draf_scan_smart'])} item penjualan voucher yang valid di database.")
@@ -668,6 +679,7 @@ with tab1:
                 st.session_state['is_submitting'] = False
                 if berhasil:
                     st.session_state['draf_scan_smart'] = []
+                    st.session_state['gambar_scan_terakhir'] = None
                     st.cache_data.clear()
                     st.success("Semua penjualan voucher berhasil dicatat & stok dikurangi!")
                     time.sleep(0.5)
@@ -716,8 +728,15 @@ with tab2:
             df_t_filtered = df_t_filtered[df_t_filtered['jenis'] == pilih_filter_jenis]
         
         profit_filter_val = pd.to_numeric(df_t_filtered['profit'], errors='coerce').fillna(0).sum() if len(df_t_filtered) > 0 else 0
+        omzet_filter_val = pd.to_numeric(df_t_filtered['total'], errors='coerce').fillna(0).sum() if len(df_t_filtered) > 0 else 0
+
+        # KOTAK TOTAL OMZET & PROFIT DI TAB RIWAYAT
         st.markdown(f"""
-            <div style="background-color:#1E1E1E; padding:12px; border-radius:8px; border:1px solid #2ca02c; text-align:center; margin:15px 0;">
+            <div style="background-color:#1E1E1E; padding:12px; border-radius:8px; border:1px solid #14B8A6; text-align:center; margin:15px 0 10px 0;">
+                <span style="color:#14B8A6; font-size:14px; font-weight:bold;">📦 TOTAL OMZET (SESI & FILTER AKTIF):</span><br>
+                <span style="color:#fff; font-size:20px; font-weight:bold;">{f_uang(omzet_filter_val)}</span>
+            </div>
+            <div style="background-color:#1E1E1E; padding:12px; border-radius:8px; border:1px solid #2ca02c; text-align:center; margin-bottom:15px;">
                 <span style="color:#2ca02c; font-size:14px; font-weight:bold;">🔥 TOTAL PROFIT (SESI & FILTER AKTIF):</span><br>
                 <span style="color:#fff; font-size:20px; font-weight:bold;">{f_uang(profit_filter_val)}</span>
             </div>
