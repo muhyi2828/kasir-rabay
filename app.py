@@ -253,20 +253,22 @@ with col_head2:
     with st.popover("≡", help="Menu Setelan"):
         st.markdown("<h3 style='text-align:center; color:#14B8A6; margin-top:0;'>PENGATURAN</h3>", unsafe_allow_html=True)
         
+        # --- TOTAL PROFIT BULAN INI BERDASARKAN RIWAYAT SESI YANG DIARSIPKAN ---
         total_profit_bulan_ini = 0
-        if data_t and len(data_t) > 0:
-            df_prof_m = pd.DataFrame(data_t)
-            df_prof_m['Waktu_Parsed'] = pd.to_datetime(df_prof_m['waktu'], errors='coerce')
+        if data_sesi and len(data_sesi) > 0:
+            df_sesi_prof = pd.DataFrame(data_sesi)
+            df_sesi_prof['Waktu_Tutup_Parsed'] = pd.to_datetime(df_sesi_prof['waktu_tutup_sesi'], errors='coerce')
+            
             now_jkt = datetime.now(pytz.timezone('Asia/Jakarta'))
             current_year = now_jkt.year
             current_month = now_jkt.month
             
-            df_bulan_ini = df_prof_m[
-                (df_prof_m['Waktu_Parsed'].dt.year == current_year) & 
-                (df_prof_m['Waktu_Parsed'].dt.month == current_month)
+            df_sesi_bulan_ini = df_sesi_prof[
+                (df_sesi_prof['Waktu_Tutup_Parsed'].dt.year == current_year) & 
+                (df_sesi_prof['Waktu_Tutup_Parsed'].dt.month == current_month)
             ]
-            if not df_bulan_ini.empty:
-                total_profit_bulan_ini = pd.to_numeric(df_bulan_ini['profit'], errors='coerce').fillna(0).sum()
+            if not df_sesi_bulan_ini.empty:
+                total_profit_bulan_ini = pd.to_numeric(df_sesi_bulan_ini['total_profit'], errors='coerce').fillna(0).sum()
 
         st.markdown(f"""
             <div style="background-color:#1E1E1E; padding:15px; border-radius:10px; border:1px solid #14B8A6; text-align:center; margin-bottom:20px;">
@@ -1100,7 +1102,6 @@ with tab4:
     if data_s and len(data_s) > 0:
         df_s = pd.DataFrame(data_s)
         
-        # --- URUTKAN BERDASARKAN ABJAD NAMA BARANG (A-Z) ---
         if 'nama_barang' in df_s.columns:
             df_s = df_s.sort_values(by='nama_barang', key=lambda col: col.str.lower()).reset_index(drop=True)
 
