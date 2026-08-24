@@ -309,7 +309,7 @@ with col_head2:
             if "cabang" in st.query_params: del st.query_params["cabang"]
             st.cache_data.clear()
             st.rerun()
-    st.markdown("</div>", unsafe_allow_html=Thread if 'Thread' in globals() else "</div>", unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
 
 # --- TAB UTAMA (5 TAB) ---
 tab1, tab2, tab3, tab4, tab5 = st.tabs(["TRANSAKSI", "RIWAYAT", "DASHBOARD", "STOK BARANG", "💰 GAJI"])
@@ -528,7 +528,6 @@ with tab1:
 
                 client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
                 
-                # PROMPT KHUSUS UNTUK MEMBACA CATATAN VOUCHER KARYAWAN ANDA
                 prompt_text = """
                 Analisis gambar catatan penjualan voucher fisik ini. Catatan berbentuk nama provider diikuti titik dua atau teks, lalu deretan angka nominal yang dipisah tanda tambah (+) seperti 'AXIS:13+13+13+14' atau 'TSEL:10+10+11'. 
                 Angka-angka tersebut merepresentasikan harga jual voucher dalam ribuan rupiah (contoh: angka 13 artinya 13000, 10 artinya 10000, 16 artinya 16000).
@@ -556,11 +555,9 @@ with tab1:
                             prov = parts[0]
                             try:
                                 nom_val = int(re.sub(r'[^0-9]', '', parts[1]))
-                                # Jika angkanya kecil (misal 13), ubah ke ribuan (13000)
                                 if nom_val < 1000:
                                     nom_val = nom_val * 1000
                                 
-                                # Cari barang yang cocok di database stok berdasarkan nama atau harga jual
                                 matched_nama = f"{prov} {int(nom_val/1000)}K"
                                 matched_row_id = None
                                 matched_profit = 0
@@ -616,7 +613,6 @@ with tab1:
                     prof = item['Profit']
                     r_id = item['Row_Stok']
                     
-                    # Kurangi stok di database jika barang terdaftar
                     if r_id:
                         for s_item in data_s:
                             if s_item.get('id') == r_id:
