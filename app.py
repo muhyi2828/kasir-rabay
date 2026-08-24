@@ -168,28 +168,25 @@ if data_t is None or data_s is None or data_k is None or data_sesi is None or da
     st.error("⚠️ Gagal terhubung ke Supabase. Periksa kembali URL dan Kunci API Anda.")
     st.stop()
 
-# SESI AKTIF BERDASARKAN RIWAYAT SESI TERAKHIR
-def load_valid_session(data_riwayat_sesi, data_kas):
-    waktu_default = "2020-01-01 00:00:00"
-    if data_riwayat_sesi and len(data_riwayat_sesi) > 0:
-        sorted_sesi = sorted(data_riwayat_sesi, key=lambda x: x.get('waktu_tutup_sesi', ''), reverse=True)
-        waktu_tutup_terakhir = sorted_sesi[0].get('waktu_tutup_sesi', waktu_default)
-        return waktu_tutup_terakhir, 0, 0
-    
-    if data_kas and len(data_kas) > 0:
-        sorted_kas = sorted(data_kas, key=lambda x: x.get('waktu', ''), reverse=False)
-        row_terakhir = sorted_kas[-1]
-        return row_terakhir.get('waktu', waktu_default), int(row_terakhir.get('cash', 0)), int(row_terakhir.get('digital', 0))
-    return waktu_default, 0, 0
+# AMBIL DATA SESI AKTIF DARI TABEL KAS SUPABASE
+def load_active_session_from_db(data_kas_db):
+    if data_kas_db and len(data_kas_db) > 0:
+        sorted_kas = sorted(data_kas_db, key=lambda x: x.get('waktu', ''), reverse=True)
+        latest = sorted_kas[0]
+        return int(latest.get('cash', 0)), int(latest.get('digital', 0)), latest.get('waktu', "2020-01-01 00:00:00")
+    return 0, 0, "2020-01-01 00:00:00"
 
-waktu_mulai_db, modal_cash_db, modal_digi_db = load_valid_session(data_sesi, data_k)
+db_cash, db_digi, db_waktu_mulai = load_active_session_from_db(data_k)
 
-if 'waktu_mulai_sesi' not in st.session_state or st.session_state.get('reset_session_flag', False):
-    st.session_state['waktu_mulai_sesi'] = waktu_mulai_db
-    st.session_state['reset_session_flag'] = False
+if 'waktu_mulai_sesi' not in st.session_state:
+    st.session_state['waktu_mulai_sesi'] = db_waktu_mulai
 
-if 'modal_cash' not in st.session_state: st.session_state['modal_cash'] = modal_cash_db
-if 'modal_digi' not in st.session_state: st.session_state['modal_digi'] = modal_digi_db
+if 'modal_cash' not in st.session_state: 
+    st.session_state['modal_cash'] = db_cash
+
+if 'modal_digi' not in st.session_state: 
+    st.session_state['modal_digi'] = db_digi
+
 if 'penyesuaian_cash' not in st.session_state: st.session_state['penyesuaian_cash'] = 0
 if 'penyesuaian_digi' not in st.session_state: st.session_state['penyesuaian_digi'] = 0
 if 'draf_scan_smart' not in st.session_state: st.session_state['draf_scan_smart'] = []
@@ -540,7 +537,6 @@ with tab1:
                 Jangan tambahkan teks pengantar apa pun, langsung daftar itemnya.
                 """
                 
-                # DIKEMBALIKAN MENGGUNAKAN MODEL GEMINI 3.5 FLASH-LITE SESUAI PILIHAN ANDA
                 res = client.models.generate_content(model='gemini-3.5-flash-lite', contents=[img_temp, prompt_text])
                 lens_placeholder.empty()
 
@@ -837,12 +833,25 @@ with tab3:
         if input_digi_baru > 0: st.caption(f"👀 Terbaca: **{f_uang(input_digi_baru)}**")
             
         if st.button("💾 Simpan Modal Sesi", type="primary", use_container_width=True):
-            st.session_state['modal_cash'] = int(input_cash_baru)
-            st.session_state['modal_digi'] = int(input_digi_baru)
-            st.cache_data.clear()
-            st.success("Modal awal sesi diperbarui!")
-            time.sleep(0.5)
-            st.rerun()
+            waktu_sekarang = datetime.now(pytz.timezone('Asia/Jakarta')).strftime("%Y-%m-%d %H:%M:%S")
+            try:
+                # Simpan atau perbarui data modal ke tabel 'kas' di Supabase agar aman permanen
+                supabase.table("kas").insert({
+                    "waktu": waktu_sekarang,
+                    "cash": int(input_cash_baru),
+                    "digital": int(input_digi_baru),
+                    "cabang": cabang_aktif
+                }).execute()
+
+                st.session_state['modal_cash'] = int(input_cash_baru)
+                st.session_state['modal_digi'] = int(input_digi_baru)
+                st.session_state['waktu_mulai_sesi'] = waktu_sekarang
+                st.cache_data.clear()
+                st.success("Modal awal sesi berhasil disimpan permanen ke database!")
+                time.sleep(0.5)
+                st.rerun()
+            except Exception as e:
+                st.error(f"Gagal menyimpan modal ke database: {e}")
 
     st.markdown("---")
 
