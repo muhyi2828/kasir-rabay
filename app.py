@@ -511,16 +511,53 @@ with tab1:
 
         if sumber_gambar and st.button("🔍 AI SCAN CATATAN VOUCHER", use_container_width=True, type="primary", disabled=modal_belum_diisi):
             try:
-                lens_placeholder = st.empty()
                 img_temp = Image.open(sumber_gambar)
                 buffered = io.BytesIO()
                 img_temp.save(buffered, format="JPEG")
                 img_str = base64.b64encode(buffered.getvalue()).decode()
 
+                # --- ANIMASI PEMINDAI GOOGLE LENS ---
+                lens_placeholder = st.empty()
                 lens_placeholder.markdown(f"""
-                    <div style="text-align:center;">
-                        <p style="color:#14B8A6; font-weight:bold; font-size:16px;">🔍 AI Sedang Membaca Catatan Voucher & Angka Penjualan...</p>
+                    <style>
+                    @keyframes scanGlow {{
+                        0% {{ top: 0%; opacity: 0.8; }}
+                        50% {{ opacity: 1; }}
+                        100% {{ top: 95%; opacity: 0.8; }}
+                    }}
+                    .lens-container {{
+                        position: relative;
+                        width: 100%;
+                        max-height: 250px;
+                        overflow: hidden;
+                        border-radius: 10px;
+                        border: 2px solid #14B8A6;
+                        background-color: #000;
+                        text-align: center;
+                        margin-bottom: 10px;
+                    }}
+                    .lens-img {{
+                        width: 100%;
+                        height: auto;
+                        opacity: 0.6;
+                        display: block;
+                        margin: 0 auto;
+                    }}
+                    .scan-beam {{
+                        position: absolute;
+                        left: 0;
+                        right: 0;
+                        height: 4px;
+                        background-color: #14B8A6;
+                        box-shadow: 0 0 15px #14B8A6, 0 0 30px #14B8A6;
+                        animation: scanGlow 1.5s infinite alternate ease-in-out;
+                    }}
+                    </style>
+                    <div class="lens-container">
+                        <div class="scan-beam"></div>
+                        <img src="data:image/jpeg;base64,{img_str}" class="lens-img">
                     </div>
+                    <p style="text-align:center; color:#14B8A6; font-weight:bold; font-size:15px;">🔍 Sedang Memindai Catatan Voucher...</p>
                 """, unsafe_allow_html=True)
 
                 client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
@@ -555,7 +592,7 @@ with tab1:
                                 if nom_val < 1000:
                                     nom_val = nom_val * 1000
                                 
-                                matched_nama = f"{prov} {int(nom_val/1000)}K"
+                                matched_nama = None
                                 matched_row_id = None
                                 matched_profit = 0
                                 
@@ -569,12 +606,14 @@ with tab1:
                                         matched_profit = hj_stk - hm_stk
                                         break
                                 
-                                processed_data.append({
-                                    'Nama Barang': matched_nama,
-                                    'Nominal (Rp)': nom_val,
-                                    'Profit': matched_profit,
-                                    'Row_Stok': matched_row_id
-                                })
+                                # HANYA MASUKKAN JIKA TERDAFTAR DI DATABASE STOK
+                                if matched_row_id is not None:
+                                    processed_data.append({
+                                        'Nama Barang': matched_nama,
+                                        'Nominal (Rp)': nom_val,
+                                        'Profit': matched_profit,
+                                        'Row_Stok': matched_row_id
+                                    })
                             except:
                                 pass
 
@@ -584,7 +623,7 @@ with tab1:
 
         if st.session_state['draf_scan_smart']:
             st.markdown("---")
-            st.info(f"✨ Berhasil membaca {len(st.session_state['draf_scan_smart'])} item penjualan voucher dari catatan.")
+            st.info(f"✨ Berhasil membaca {len(st.session_state['draf_scan_smart'])} item penjualan voucher yang valid di database.")
             
             indices_to_delete = []
             for i, item in enumerate(st.session_state['draf_scan_smart']):
@@ -635,6 +674,9 @@ with tab1:
                     st.rerun()
                 else: st.error(f"Sebagian data gagal disimpan! Error: {err_terakhir}")
             st.markdown('</div>', unsafe_allow_html=True)
+        else:
+            if sumber_gambar:
+                st.warning("⚠️ Catatan terbaca, tetapi tidak ada item yang cocok dengan data stok Anda. Pastikan nama provider dan harga jual voucher sudah terdaftar di menu **Stok Barang**.")
 
 # --- TAB 2: RIWAYAT ---
 with tab2:
@@ -835,7 +877,6 @@ with tab3:
         if st.button("💾 Simpan Modal Sesi", type="primary", use_container_width=True):
             waktu_sekarang = datetime.now(pytz.timezone('Asia/Jakarta')).strftime("%Y-%m-%d %H:%M:%S")
             try:
-                # Simpan atau perbarui data modal ke tabel 'kas' di Supabase agar aman permanen
                 supabase.table("kas").insert({
                     "waktu": waktu_sekarang,
                     "cash": int(input_cash_baru),
