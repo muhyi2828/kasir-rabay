@@ -540,7 +540,8 @@ with tab1:
                 Jangan tambahkan teks pengantar apa pun, langsung daftar itemnya.
                 """
                 
-                res = client.models.generate_content(model='gemini-2.5-flash', contents=[img_temp, prompt_text])
+                # DIKEMBALIKAN MENGGUNAKAN MODEL GEMINI 3.5 FLASH-LITE SESUAI PILIHAN ANDA
+                res = client.models.generate_content(model='gemini-3.5-flash-lite', contents=[img_temp, prompt_text])
                 lens_placeholder.empty()
 
                 raw_text = res.text.strip()
