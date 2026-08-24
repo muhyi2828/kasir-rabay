@@ -243,7 +243,6 @@ with col_head2:
     with st.popover("≡", help="Menu Setelan"):
         st.markdown("<h3 style='text-align:center; color:#14B8A6; margin-top:0;'>PENGATURAN</h3>", unsafe_allow_html=True)
         
-        # HITUNG TOTAL PROFIT BULAN INI OTOMATIS
         total_profit_bulan_ini = 0
         if data_t and len(data_t) > 0:
             df_prof_m = pd.DataFrame(data_t)
@@ -310,7 +309,7 @@ with col_head2:
             if "cabang" in st.query_params: del st.query_params["cabang"]
             st.cache_data.clear()
             st.rerun()
-    st.markdown("</div>", unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=Thread if 'Thread' in globals() else "</div>", unsafe_allow_html=True)
 
 # --- TAB UTAMA (5 TAB) ---
 tab1, tab2, tab3, tab4, tab5 = st.tabs(["TRANSAKSI", "RIWAYAT", "DASHBOARD", "STOK BARANG", "💰 GAJI"])
@@ -322,7 +321,7 @@ with tab1:
         st.error("⚠️ MASUKAN MODAL AWAL DULU")
         st.info("Silakan buka Tab **DASHBOARD** lalu isi **Setel Modal Awal Sesi Ini** untuk mulai bertransaksi.")
     
-    metode = st.radio("Metode Input:", ["Ketik Manual / Barcode", "AI Scan Mutasi Foto"], horizontal=True, label_visibility="collapsed")
+    metode = st.radio("Metode Input:", ["Ketik Manual / Barcode", "AI Scan Catatan Voucher / Mutasi"], horizontal=True, label_visibility="collapsed")
     
     if metode == "Ketik Manual / Barcode":
         st.markdown('<div class="barcode-box">', unsafe_allow_html=True)
@@ -510,9 +509,10 @@ with tab1:
                 st.rerun()
 
     else: 
-        sumber_gambar = st.file_uploader("Upload Screenshot Mutasi:", type=["jpg", "jpeg", "png"], disabled=modal_belum_diisi)
+        st.info("💡 **Tips AI Scan Catatan Voucher:** Upload foto catatan tulisan tangan karyawan Anda (contoh: `AXIS:13+13+14+...`). AI akan otomatis membaca jenis voucher, nominal, dan menjumlahkan seluruh item terjual!")
+        sumber_gambar = st.file_uploader("Upload Foto Catatan / Mutasi:", type=["jpg", "jpeg", "png"], disabled=modal_belum_diisi)
 
-        if sumber_gambar and st.button("🔍 AI SCAN OTOMATIS (+/-)", use_container_width=True, type="primary", disabled=modal_belum_diisi):
+        if sumber_gambar and st.button("🔍 AI SCAN CATATAN VOUCHER", use_container_width=True, type="primary", disabled=modal_belum_diisi):
             try:
                 lens_placeholder = st.empty()
                 img_temp = Image.open(sumber_gambar)
@@ -521,83 +521,113 @@ with tab1:
                 img_str = base64.b64encode(buffered.getvalue()).decode()
 
                 lens_placeholder.markdown(f"""
-                    <div class="lens-container">
-                        <div class="scan-line"></div>
-                        <img src="data:image/jpeg;base64,{img_str}"/>
+                    <div style="text-align:center;">
+                        <p style="color:#14B8A6; font-weight:bold; font-size:16px;">🔍 AI Sedang Membaca Catatan Voucher & Angka Penjualan...</p>
                     </div>
-                    <p style="text-align:center; color:#14B8A6; font-weight:bold; font-size:15px; margin-top:10px;">🔍 Sedang Membaca Angka Transaksi...</p>
                 """, unsafe_allow_html=True)
 
                 client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
-                res = client.models.generate_content(model='gemini-3.5-flash-lite', contents=[img_temp, "Tulis semua nominal transaksi beserta tandanya (+ atau -). Balas dengan format angka dipisah koma, contoh: +9067000,-75000,-5000000"])
+                
+                # PROMPT KHUSUS UNTUK MEMBACA CATATAN VOUCHER KARYAWAN ANDA
+                prompt_text = """
+                Analisis gambar catatan penjualan voucher fisik ini. Catatan berbentuk nama provider diikuti titik dua atau teks, lalu deretan angka nominal yang dipisah tanda tambah (+) seperti 'AXIS:13+13+13+14' atau 'TSEL:10+10+11'. 
+                Angka-angka tersebut merepresentasikan harga jual voucher dalam ribuan rupiah (contoh: angka 13 artinya 13000, 10 artinya 10000, 16 artinya 16000).
+                Tugas Anda: ekstrak setiap item penjualan voucher tersebut secara rinci.
+                Balas STRICTLY dalam format teks baris per baris dengan format: [PROVIDER] [NOMINAL_PENUH], contoh:
+                AXIS 13000
+                AXIS 13000
+                AXIS 14000
+                TSEL 10000
+                Jangan tambahkan teks pengantar apa pun, langsung daftar itemnya.
+                """
+                
+                res = client.models.generate_content(model='gemini-2.5-flash', contents=[img_temp, prompt_text])
                 lens_placeholder.empty()
 
-                raw_text = res.text.replace(" ", "")
-                items = raw_text.split(',')
+                raw_text = res.text.strip()
+                lines = raw_text.split('\n')
                 processed_data = []
-                for idx, item in enumerate(items):
-                    if '+' in item or '-' in item:
-                        nom_val = int(re.sub(r'[^0-9]', '', item))
-                        kategori = 'Tarik Tunai' if '+' in item else 'Bank'
-                        tanda_simbol = '+' if '+' in item else '-'
-                        processed_data.append({'Tanda': tanda_simbol, 'Jenis Otomatis': kategori, 'Nominal (Rp)': nom_val})
-                        st.session_state[f"ocr_jns_{idx}"] = kategori
+                
+                for idx, line in enumerate(lines):
+                    line = line.strip()
+                    if line:
+                        parts = line.split()
+                        if len(parts) >= 2:
+                            prov = parts[0]
+                            try:
+                                nom_val = int(re.sub(r'[^0-9]', '', parts[1]))
+                                # Jika angkanya kecil (misal 13), ubah ke ribuan (13000)
+                                if nom_val < 1000:
+                                    nom_val = nom_val * 1000
+                                
+                                # Cari barang yang cocok di database stok berdasarkan nama atau harga jual
+                                matched_nama = f"{prov} {int(nom_val/1000)}K"
+                                matched_row_id = None
+                                matched_profit = 0
+                                
+                                for st_item in data_s:
+                                    nm_stk = st_item.get('nama_barang', '').upper()
+                                    hj_stk = int(st_item.get('harga_jual', 0))
+                                    hm_stk = int(st_item.get('harga_modal', 0))
+                                    if prov.upper() in nm_stk and hj_stk == nom_val:
+                                        matched_nama = st_item.get('nama_barang')
+                                        matched_row_id = st_item.get('id')
+                                        matched_profit = hj_stk - hm_stk
+                                        break
+                                
+                                processed_data.append({
+                                    'Nama Barang': matched_nama,
+                                    'Nominal (Rp)': nom_val,
+                                    'Profit': matched_profit,
+                                    'Row_Stok': matched_row_id
+                                })
+                            except:
+                                pass
+
                 st.session_state['draf_scan_smart'] = processed_data
                 st.rerun()
-            except Exception as e: st.error(f"Gagal scan: {e}")
+            except Exception as e: st.error(f"Gagal scan catatan: {e}")
 
         if st.session_state['draf_scan_smart']:
             st.markdown("---")
-            st.info(f"✨ Berhasil mendeteksi {len(st.session_state['draf_scan_smart'])} transaksi.")
-            mass_minus_choice = st.selectbox("Pilih Jenis untuk Semua Min (-)", options=["Bank", "E-Wallet", "Tarik Tunai"], key="mass_min_select", disabled=modal_belum_diisi)
-            if st.button("🔄 Terapkan ke Semua Min (-)", use_container_width=True, disabled=modal_belum_diisi):
-                for idx, item in enumerate(st.session_state['draf_scan_smart']):
-                    if item['Tanda'] == '-':
-                        item['Jenis Otomatis'] = mass_minus_choice
-                        st.session_state[f"ocr_jns_{idx}"] = mass_minus_choice
-                st.success("Semua transaksi minus (-) berhasil diubah!")
-                st.rerun()
-
-            st.markdown("<br>", unsafe_allow_html=True)
+            st.info(f"✨ Berhasil membaca {len(st.session_state['draf_scan_smart'])} item penjualan voucher dari catatan.")
+            
             indices_to_delete = []
             for i, item in enumerate(st.session_state['draf_scan_smart']):
                 col_h1, col_h2 = st.columns([6, 1])
-                with col_h1: st.markdown(f"**Trx #{i+1} ({item['Tanda']})** - {f_uang(item['Nominal (Rp)'])}")
+                with col_h1: st.markdown(f"**Item #{i+1}: {item['Nama Barang']}** - Harga: {f_uang(item['Nominal (Rp)'])} (Untung: {f_uang(item['Profit'])})")
                 with col_h2:
-                    if st.button("❌", key=f"del_ocr_{i}", help="Hapus item"): indices_to_delete.append(i)
-                
-                if item['Tanda'] == '+':
-                    jns_pilih = "Tarik Tunai"
-                    st.markdown("<p style='color:#14B8A6; font-size:13px; margin:0;'>Jenis: <b>Tarik Tunai (Otomatis)</b></p>", unsafe_allow_html=True)
-                else:
-                    pilihan_opsi_ocr = ["Bank", "E-Wallet", "Tarik Tunai"]
-                    if f"ocr_jns_{i}" not in st.session_state: st.session_state[f"ocr_jns_{i}"] = item['Jenis Otomatis']
-                    jns_pilih = st.selectbox(f"Pilih Jenis Trx #{i+1}", options=pilihan_opsi_ocr, key=f"ocr_jns_{i}", disabled=modal_belum_diisi)
-                    item['Jenis Otomatis'] = jns_pilih
-                
-                est_admin = hitung_admin(item['Nominal (Rp)'], jns_pilih)
-                st.markdown(f"<p style='color:#2ca02c; font-size:13px; margin-top:2px;'>💰 Estimasi Admin (Cuan): <b>{f_uang(est_admin)}</b></p>", unsafe_allow_html=True)
-                st.markdown("<hr style='margin:10px 0; border-color:#333;'>", unsafe_allow_html=True)
+                    if st.button("❌", key=f"del_ocr_vouc_{i}", help="Hapus item"): indices_to_delete.append(i)
+                st.markdown("<hr style='margin:5px 0; border-color:#333;'>", unsafe_allow_html=True)
             
             if indices_to_delete:
                 st.session_state['draf_scan_smart'] = [item for idx, item in enumerate(st.session_state['draf_scan_smart']) if idx not in indices_to_delete]
                 st.rerun()
 
             st.markdown('<div class="floating-container">', unsafe_allow_html=True)
-            if st.button("💾 SIMPAN SEMUA TRANSAKSI OCR", type="primary", use_container_width=True, disabled=st.session_state['is_submitting'] or modal_belum_diisi):
+            if st.button("💾 SIMPAN SEMUA PENJUALAN VOUCHER", type="primary", use_container_width=True, disabled=st.session_state['is_submitting'] or modal_belum_diisi):
                 st.session_state['is_submitting'] = True
                 waktu = datetime.now(pytz.timezone('Asia/Jakarta')).strftime("%Y-%m-%d %H:%M:%S")
                 berhasil = True
                 err_terakhir = ""
-                for i, item in enumerate(st.session_state['draf_scan_smart']):
-                    jenis = "Tarik Tunai" if item['Tanda'] == '+' else st.session_state.get(f"ocr_jns_{i}", item['Jenis Otomatis'])
+                
+                for item in st.session_state['draf_scan_smart']:
                     nom = item['Nominal (Rp)']
-                    admin = hitung_admin(nom, jenis)
-                    total = nom - admin if jenis == "Tarik Tunai" else nom + admin
+                    prof = item['Profit']
+                    r_id = item['Row_Stok']
                     
+                    # Kurangi stok di database jika barang terdaftar
+                    if r_id:
+                        for s_item in data_s:
+                            if s_item.get('id') == r_id:
+                                current_stk = int(s_item.get('stok', 0))
+                                if current_stk > 0:
+                                    db_update("stok", r_id, {"stok": current_stk - 1})
+                                break
+
                     sukses_ins, err_ins = db_insert("transaksi", {
-                        "waktu": waktu, "jenis": jenis, "nominal": int(nom),
-                        "admin": int(admin), "total": int(total), "profit": int(admin)
+                        "waktu": waktu, "jenis": "Penjualan Barang", "nominal": int(nom),
+                        "admin": int(prof), "total": int(nom), "profit": int(prof)
                     })
                     if not sukses_ins: 
                         berhasil = False
@@ -607,7 +637,7 @@ with tab1:
                 if berhasil:
                     st.session_state['draf_scan_smart'] = []
                     st.cache_data.clear()
-                    st.success("Semua transaksi berhasil disimpan!")
+                    st.success("Semua penjualan voucher berhasil dicatat & stok dikurangi!")
                     time.sleep(0.5)
                     st.rerun()
                 else: st.error(f"Sebagian data gagal disimpan! Error: {err_terakhir}")
