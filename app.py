@@ -1099,6 +1099,11 @@ with tab4:
 
     if data_s and len(data_s) > 0:
         df_s = pd.DataFrame(data_s)
+        
+        # --- URUTKAN BERDASARKAN ABJAD NAMA BARANG (A-Z) ---
+        if 'nama_barang' in df_s.columns:
+            df_s = df_s.sort_values(by='nama_barang', key=lambda col: col.str.lower()).reset_index(drop=True)
+
         list_kategori_filter = ["Semua Kategori"] + sorted(df_s['kategori'].dropna().unique().tolist())
         pilih_filter_kat = st.selectbox("Filter Berdasarkan Kategori:", options=list_kategori_filter)
         
