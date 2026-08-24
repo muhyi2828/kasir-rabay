@@ -1,6 +1,5 @@
 import streamlit as st
 import pandas as pd
-import plotly.express as px
 from PIL import Image
 from google import genai
 import re
@@ -40,7 +39,6 @@ st.markdown("""
     .barcode-box { margin-bottom: 20px; margin-top: 10px; }
     label, .stRadio label { color: #cccccc !important; }
     .metric-card-blue { background-color: #1E1E1E; padding: 20px; border-radius: 12px; border-left: 5px solid #14B8A6; margin-bottom: 15px; }
-    .metric-card-green { background-color: #1E1E1E; padding: 20px; border-radius: 12px; border-left: 5px solid #2ca02c; margin-bottom: 15px; }
     .floating-container { position: fixed; bottom: 0; left: 0; right: 0; background-color: rgba(5, 5, 5, 0.95); padding: 12px 16px; z-index: 99999; border-top: 1px solid #222; box-shadow: 0 -4px 10px rgba(0,0,0,0.8); }
     .main .block-container { padding-bottom: 90px; }
     .login-box { background-color: #111; padding: 30px; border-radius: 12px; border: 1px solid #14B8A6; margin-top: 50px; text-align: center; }
@@ -927,7 +925,6 @@ with tab3:
 
     tot_transaksi_cash = 0
     tot_transaksi_digi = 0
-    profit_sesi_ini = 0
     
     if data_t and len(data_t) > 0:
         df_trx = pd.DataFrame(data_t)
@@ -937,7 +934,6 @@ with tab3:
             
             df_sesi = df_trx[df_trx['Waktu_Parsed'] >= t_mulai_sesi].copy()
             if not df_sesi.empty:
-                profit_sesi_ini = pd.to_numeric(df_sesi['profit'], errors='coerce').fillna(0).sum()
                 for idx, r in df_sesi.iterrows():
                     jns = r['jenis']
                     nom = float(r['nominal'])
@@ -988,25 +984,6 @@ with tab3:
     """, unsafe_allow_html=True)
 
     st.markdown("---")
-
-    st.markdown(f"""
-        <div class="metric-card-green">
-            <h4 style="margin:0; color:#2ca02c;">🔥 Profit Sesi Ini</h4>
-            <h1 style="margin:5px 0 0 0; color:#fff;">{f_uang(profit_sesi_ini)}</h1>
-        </div>
-    """, unsafe_allow_html=True)
-    
-    st.markdown("### 📈 Grafik Profit Berdasarkan Sesi")
-    if data_t and len(data_t) > 0:
-        df_trx_all = pd.DataFrame(data_t)
-        if 'waktu' in df_trx_all.columns:
-            df_trx_all['Tanggal'] = pd.to_datetime(df_trx_all['waktu'], errors='coerce').dt.strftime('%Y-%m-%d')
-            df_trx_all['Profit_Val'] = pd.to_numeric(df_trx_all['profit'], errors='coerce').fillna(0)
-            df_profit_harian = df_trx_all.groupby('Tanggal')['Profit_Val'].sum().reset_index()
-            fig_profit = px.bar(df_profit_harian, x='Tanggal', y='Profit_Val', template="plotly_dark", color_discrete_sequence=['#14B8A6'])
-            st.plotly_chart(fig_profit, use_container_width=True)
-
-    st.markdown("---")
     st.markdown("### 📜 Riwayat Sesi Kerja Sebelumnya")
     
     if data_sesi and len(data_sesi) > 0:
@@ -1024,7 +1001,6 @@ with tab3:
             map_id_sesi = {}
             map_obj_sesi = {}
             
-            # Urutkan sesi dari yang paling lama ke yang terbaru untuk menentukan rentang waktu dengan akurat
             sorted_sesi_list = sorted(data_sesi, key=lambda x: x.get('waktu_tutup_sesi', ''))
             
             for idx_s, s_row in enumerate(sorted_sesi_list):
@@ -1033,7 +1009,6 @@ with tab3:
                 list_pilihan_sesi_hapus.append(label_sesi_h)
                 map_id_sesi[label_sesi_h] = s_id
                 
-                # Tentukan rentang waktu sesi ini
                 w_tutup = s_row.get('waktu_tutup_sesi')
                 w_mulai = sorted_sesi_list[idx_s-1].get('waktu_tutup_sesi') if idx_s > 0 else (data_k[0].get('waktu', "2020-01-01 00:00:00") if len(data_k) > 0 else "2020-01-01 00:00:00")
                 map_obj_sesi[s_id] = (w_mulai, w_tutup)
@@ -1046,14 +1021,12 @@ with tab3:
                     target_id = map_id_sesi[pilihan_target_hapus]
                     w_mulai_target, w_tutup_target = map_obj_sesi[target_id]
                     
-                    # 1. Hapus transaksi yang masuk dalam rentang waktu sesi tersebut
                     if data_t:
                         for t_row in data_t:
                             t_waktu = t_row.get('waktu', '')
                             if w_mulai_target <= t_waktu <= w_tutup_target:
                                 db_delete("transaksi", t_row['id'])
 
-                    # 2. Hapus baris riwayat sesi dari database
                     if db_delete("riwayat_sesi", target_id):
                         if 'waktu_mulai_sesi' in st.session_state: del st.session_state['waktu_mulai_sesi']
                         st.cache_data.clear()
