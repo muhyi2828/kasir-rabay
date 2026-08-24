@@ -168,15 +168,32 @@ if data_t is None or data_s is None or data_k is None or data_sesi is None or da
     st.error("⚠️ Gagal terhubung ke Supabase. Periksa kembali URL dan Kunci API Anda.")
     st.stop()
 
-# AMBIL DATA SESI AKTIF DARI TABEL KAS SUPABASE
-def load_active_session_from_db(data_kas_db):
+# AMBIL DATA SESI AKTIF & WAKTU MULAI DARI SUPABASE
+def load_active_session_from_db(data_kas_db, data_sesi_db):
+    cash = 0
+    digi = 0
+    waktu_mulai = "2020-01-01 00:00:00"
+
+    # Ambil waktu tutup sesi terakhir jika ada
+    if data_sesi_db and len(data_sesi_db) > 0:
+        sorted_sesi = sorted(data_sesi_db, key=lambda x: x.get('waktu_tutup_sesi', ''), reverse=True)
+        waktu_mulai = sorted_sesi[0].get('waktu_tutup_sesi', waktu_mulai)
+
+    # Ambil kas modal terakhir
     if data_kas_db and len(data_kas_db) > 0:
         sorted_kas = sorted(data_kas_db, key=lambda x: x.get('waktu', ''), reverse=True)
         latest = sorted_kas[0]
-        return int(latest.get('cash', 0)), int(latest.get('digital', 0)), latest.get('waktu', "2020-01-01 00:00:00")
-    return 0, 0, "2020-01-01 00:00:00"
+        latest_waktu_kas = latest.get('waktu', '')
+        
+        # Jika modal diset SETELAH sesi terakhir ditutup, gunakan waktu modal tersebut
+        if latest_waktu_kas > waktu_mulai:
+            waktu_mulai = latest_waktu_kas
+            cash = int(latest.get('cash', 0))
+            digi = int(latest.get('digital', 0))
 
-db_cash, db_digi, db_waktu_mulai = load_active_session_from_db(data_k)
+    return cash, digi, waktu_mulai
+
+db_cash, db_digi, db_waktu_mulai = load_active_session_from_db(data_k, data_sesi)
 
 if 'waktu_mulai_sesi' not in st.session_state:
     st.session_state['waktu_mulai_sesi'] = db_waktu_mulai
@@ -513,7 +530,6 @@ with tab1:
 
         if sumber_gambar and st.button("🔍 AI SCAN CATATAN VOUCHER", use_container_width=True, type="primary", disabled=modal_belum_diisi):
             try:
-                # Simpan gambar ke session state agar tetap tampil setelah proses selesai
                 st.session_state['gambar_scan_terakhir'] = sumber_gambar
 
                 img_temp = Image.open(sumber_gambar)
@@ -611,7 +627,6 @@ with tab1:
                                         matched_profit = hj_stk - hm_stk
                                         break
                                 
-                                # HANYA MASUKKAN JIKA TERDAFTAR DI DATABASE STOK
                                 if matched_row_id is not None:
                                     processed_data.append({
                                         'Nama Barang': matched_nama,
@@ -626,7 +641,6 @@ with tab1:
                 st.rerun()
             except Exception as e: st.error(f"Gagal scan catatan: {e}")
 
-        # TAMPILKAN GAMBAR ASLI YANG DISCAN DI ATAS DRAF HASIL OCR AGAR BISA DISINKRONKAN
         if st.session_state.get('gambar_scan_terakhir') is not None:
             st.markdown("---")
             st.write("📷 **Foto Catatan Asli (Untuk Sinkronisasi):**")
@@ -730,7 +744,6 @@ with tab2:
         profit_filter_val = pd.to_numeric(df_t_filtered['profit'], errors='coerce').fillna(0).sum() if len(df_t_filtered) > 0 else 0
         omzet_filter_val = pd.to_numeric(df_t_filtered['total'], errors='coerce').fillna(0).sum() if len(df_t_filtered) > 0 else 0
 
-        # KOTAK TOTAL OMZET & PROFIT DI TAB RIWAYAT
         st.markdown(f"""
             <div style="background-color:#1E1E1E; padding:12px; border-radius:8px; border:1px solid #14B8A6; text-align:center; margin:15px 0 10px 0;">
                 <span style="color:#14B8A6; font-size:14px; font-weight:bold;">📦 TOTAL OMZET (SESI & FILTER AKTIF):</span><br>
