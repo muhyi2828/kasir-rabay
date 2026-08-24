@@ -15,7 +15,7 @@ import time
 # --- KONFIGURASI HALAMAN HARUS PALING ATAS ---
 st.set_page_config(page_title="RABAY CELL PRO", layout="centered", page_icon="🚀", initial_sidebar_state="collapsed")
 
-# --- CUSTOM CSS UI MODERN DARK MODE ---
+# --- CUSTOM CSS UI MODERN DARK MODE & POPUP MENU ---
 st.markdown("""
     <style>
     .stApp { background-color: #050505; color: #ffffff; }
@@ -23,14 +23,14 @@ st.markdown("""
         background-color: #14B8A6;
         padding: 15px 20px;
         display: flex;
-        justify-content: flex-start;
+        justify-content: space-between;
         align-items: center;
         margin-top: -60px;
         margin-bottom: 15px;
         margin-left: -1rem;
         margin-right: -1rem;
     }
-    .rabay-header h1 { color: white; margin: 0; font-size: 28px; font-weight: 800; font-family: sans-serif; letter-spacing: 1px;}
+    .rabay-header h1 { color: white; margin: 0; font-size: 26px; font-weight: 800; font-family: sans-serif; letter-spacing: 1px;}
     .stTabs [data-baseweb="tab-list"] { gap: 10px; background-color: transparent; overflow-x: auto; }
     .stTabs [data-baseweb="tab"] { border-radius: 4px !important; color: #cccccc !important; background-color: transparent !important; padding: 10px 15px !important; font-weight: 600 !important; white-space: nowrap; }
     .stTabs [aria-selected="true"] { background-color: #14B8A6 !important; color: white !important; }
@@ -228,13 +228,89 @@ def hitung_admin(nominal, jenis):
         elif nominal <= 10000000: return 35000
         else: return 35000 + (-(-(nominal - 10000000) // 5000000) * 5000)
 
-st.markdown(f"""
-    <div class="rabay-header">
-        <h1>RABAY CELL - {st.session_state['cabang_terpilih'].upper()}</h1>
-    </div>
-""", unsafe_allow_html=True)
+# --- HEADER UTAMA DENGAN TOMBOL POPUP MENU (GARIS 3) ---
+col_head1, col_head2 = st.columns([7, 1])
+with col_head1:
+    st.markdown(f"""
+        <div style="background-color: #14B8A6; padding: 15px 20px; border-radius: 6px; margin-top: -60px; margin-bottom: 15px;">
+            <h1 style="color: white; margin: 0; font-size: 24px; font-weight: 800; font-family: sans-serif; letter-spacing: 1px;">RABAY CELL - {st.session_state['cabang_terpilih'].upper()}</h1>
+        </div>
+    """, unsafe_allow_html=True)
 
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["TRANSAKSI", "RIWAYAT", "DASHBOARD", "STOK BARANG", "💰 GAJI", "⚙️ SETELAN"])
+with col_head2:
+    with st.popover("≡", help="Menu Setelan"):
+        st.markdown("<h3 style='text-align:center; color:#14B8A6; margin-top:0;'>PENGATURAN</h3>", unsafe_allow_html=True)
+        
+        # HITUNG TOTAL PROFIT BULAN INI OTOMATIS
+        total_profit_bulan_ini = 0
+        if data_t and len(data_t) > 0:
+            df_prof_m = pd.DataFrame(data_t)
+            df_prof_m['Waktu_Parsed'] = pd.to_datetime(df_prof_m['waktu'], errors='coerce')
+            now_jkt = datetime.now(pytz.timezone('Asia/Jakarta'))
+            current_year = now_jkt.year
+            current_month = now_jkt.month
+            
+            df_bulan_ini = df_prof_m[
+                (df_prof_m['Waktu_Parsed'].dt.year == current_year) & 
+                (df_prof_m['Waktu_Parsed'].dt.month == current_month)
+            ]
+            if not df_bulan_ini.empty:
+                total_profit_bulan_ini = pd.to_numeric(df_bulan_ini['profit'], errors='coerce').fillna(0).sum()
+
+        st.markdown(f"""
+            <div style="background-color:#1E1E1E; padding:15px; border-radius:10px; border:1px solid #14B8A6; text-align:center; margin-bottom:20px;">
+                <span style="color:#aaa; font-size:13px; font-weight:bold;">TOTAL PROFIT BULAN INI</span><br>
+                <span style="color:#14B8A6; font-size:22px; font-weight:bold;">{f_uang(total_profit_bulan_ini)}</span>
+            </div>
+        """, unsafe_allow_html=True)
+
+        st.markdown("---")
+        st.write("**Ganti Akses Cabang Ke:**")
+        idx_cabang_aktif = daftar_tampilan_cabang.index(st.session_state['cabang_terpilih']) if st.session_state['cabang_terpilih'] in daftar_tampilan_cabang else 0
+        pilihan_pindah = st.selectbox("Cabang", daftar_tampilan_cabang, index=idx_cabang_aktif, label_visibility="collapsed")
+        
+        if st.button("PINDAH CABANG", type="primary", use_container_width=True):
+            st.session_state['cabang_terpilih'] = pilihan_pindah
+            st.query_params["cabang"] = pilihan_pindah
+            if 'modal_cash' in st.session_state: del st.session_state['modal_cash']
+            if 'modal_digi' in st.session_state: del st.session_state['modal_digi']
+            st.session_state['keranjang_belanja'] = []
+            st.session_state['draf_scan_smart'] = []
+            st.cache_data.clear()
+            st.success(f"Berhasil pindah akses ke {pilihan_pindah}!")
+            st.rerun()
+
+        st.markdown("---")
+        st.markdown("🔐 **Akun Master (Kontrol Cabang)**")
+        
+        with st.form("form_ubah_akun_pop"):
+            user_baru = st.text_input("Username Master Baru", value=db_user)
+            pass_baru = st.text_input("Password Master Baru", value=db_pass, type="password")
+            
+            if st.form_submit_button("Simpan Perubahan Akun"):
+                if user_baru and pass_baru:
+                    try:
+                        res_akun = supabase.table("pengaturan_akun").select("id").execute()
+                        if res_akun.data and len(res_akun.data) > 0:
+                            akun_id = res_akun.data[0]['id']
+                            supabase.table("pengaturan_akun").update({"username": user_baru, "password": pass_baru}).eq("id", akun_id).execute()
+                        else:
+                            supabase.table("pengaturan_akun").insert({"username": user_baru, "password": pass_baru}).execute()
+                        st.success("Akun berhasil diperbarui!")
+                    except Exception as e:
+                        st.error(f"Gagal: {e}")
+                else: st.error("Tidak boleh kosong!")
+
+        st.markdown("---")
+        if st.button("🚪 Keluar / Logout Aplikasi", use_container_width=True):
+            st.session_state['is_logged_in'] = False
+            if "auth" in st.query_params: del st.query_params["auth"]
+            if "cabang" in st.query_params: del st.query_params["cabang"]
+            st.cache_data.clear()
+            st.rerun()
+
+# --- TAB UTAMA (5 TAB) ---
+tab1, tab2, tab3, tab4, tab5 = st.tabs(["TRANSAKSI", "RIWAYAT", "DASHBOARD", "STOK BARANG", "💰 GAJI"])
 
 with tab1:
     modal_belum_diisi = (st.session_state['modal_cash'] == 0 and st.session_state['modal_digi'] == 0)
@@ -904,7 +980,6 @@ with tab4:
 
     st.markdown("---")
 
-    # HITUNG TOTAL MODAL SEMUA BARANG FISIK
     total_modal_fisik_semua = 0
     if data_s and len(data_s) > 0:
         for item_s in data_s:
@@ -1111,49 +1186,3 @@ with tab5:
         st.dataframe(df_arsip_disp, use_container_width=True, hide_index=True)
     else:
         st.info("Belum ada riwayat arsip gaji.")
-
-# --- TAB 6: SETELAN & AKUN ---
-with tab6:
-    idx_cabang_aktif = daftar_tampilan_cabang.index(st.session_state['cabang_terpilih']) if st.session_state['cabang_terpilih'] in daftar_tampilan_cabang else 0
-    pilihan_pindah = st.selectbox("Ganti Akses Cabang Ke:", daftar_tampilan_cabang, index=idx_cabang_aktif)
-    
-    if st.button("PINDAH CABANG", type="primary", use_container_width=True):
-        st.session_state['cabang_terpilih'] = pilihan_pindah
-        st.query_params["cabang"] = pilihan_pindah
-        if 'modal_cash' in st.session_state: del st.session_state['modal_cash']
-        if 'modal_digi' in st.session_state: del st.session_state['modal_digi']
-        st.session_state['keranjang_belanja'] = []
-        st.session_state['draf_scan_smart'] = []
-        st.cache_data.clear()
-        st.success(f"Berhasil pindah akses ke {pilihan_pindah}!")
-        st.rerun()
-
-    st.markdown("---")
-    st.markdown("### 🔐 Pengaturan Akun Master")
-    st.info("Akun ini digunakan untuk mengontrol seluruh cabang.")
-    
-    with st.form("form_ubah_akun"):
-        user_baru = st.text_input("Username Master Baru", value=db_user)
-        pass_baru = st.text_input("Password Master Baru", value=db_pass, type="password")
-        
-        if st.form_submit_button("Simpan Perubahan Akun"):
-            if user_baru and pass_baru:
-                try:
-                    res_akun = supabase.table("pengaturan_akun").select("id").execute()
-                    if res_akun.data and len(res_akun.data) > 0:
-                        akun_id = res_akun.data[0]['id']
-                        supabase.table("pengaturan_akun").update({"username": user_baru, "password": pass_baru}).eq("id", akun_id).execute()
-                    else:
-                        supabase.table("pengaturan_akun").insert({"username": user_baru, "password": pass_baru}).execute()
-                    st.success("Username & Password berhasil diperbarui di Supabase!")
-                except Exception as e:
-                    st.error(f"Gagal memperbarui akun: {e}")
-            else: st.error("Form tidak boleh kosong!")
-
-    st.markdown("---")
-    if st.button("🚪 Keluar / Logout Aplikasi", use_container_width=True):
-        st.session_state['is_logged_in'] = False
-        if "auth" in st.query_params: del st.query_params["auth"]
-        if "cabang" in st.query_params: del st.query_params["cabang"]
-        st.cache_data.clear()
-        st.rerun()
