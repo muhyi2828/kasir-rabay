@@ -174,18 +174,15 @@ def load_active_session_from_db(data_kas_db, data_sesi_db):
     digi = 0
     waktu_mulai = "2020-01-01 00:00:00"
 
-    # Ambil waktu tutup sesi terakhir jika ada
     if data_sesi_db and len(data_sesi_db) > 0:
         sorted_sesi = sorted(data_sesi_db, key=lambda x: x.get('waktu_tutup_sesi', ''), reverse=True)
         waktu_mulai = sorted_sesi[0].get('waktu_tutup_sesi', waktu_mulai)
 
-    # Ambil kas modal terakhir
     if data_kas_db and len(data_kas_db) > 0:
         sorted_kas = sorted(data_kas_db, key=lambda x: x.get('waktu', ''), reverse=True)
         latest = sorted_kas[0]
         latest_waktu_kas = latest.get('waktu', '')
         
-        # Jika modal diset SETELAH sesi terakhir ditutup, gunakan waktu modal tersebut
         if latest_waktu_kas > waktu_mulai:
             waktu_mulai = latest_waktu_kas
             cash = int(latest.get('cash', 0))
@@ -1025,22 +1022,43 @@ with tab3:
         with st.expander("🗑️ Hapus Sesi Tertentu Dari Database"):
             list_pilihan_sesi_hapus = []
             map_id_sesi = {}
-            for s_row in data_sesi:
+            map_obj_sesi = {}
+            
+            # Urutkan sesi dari yang paling lama ke yang terbaru untuk menentukan rentang waktu dengan akurat
+            sorted_sesi_list = sorted(data_sesi, key=lambda x: x.get('waktu_tutup_sesi', ''))
+            
+            for idx_s, s_row in enumerate(sorted_sesi_list):
                 s_id = s_row.get('id')
                 label_sesi_h = f"ID: {s_id} | Waktu Tutup: {s_row.get('waktu_tutup_sesi')} (Profit: {f_uang(s_row.get('total_profit', 0))})"
                 list_pilihan_sesi_hapus.append(label_sesi_h)
                 map_id_sesi[label_sesi_h] = s_id
+                
+                # Tentukan rentang waktu sesi ini
+                w_tutup = s_row.get('waktu_tutup_sesi')
+                w_mulai = sorted_sesi_list[idx_s-1].get('waktu_tutup_sesi') if idx_s > 0 else (data_k[0].get('waktu', "2020-01-01 00:00:00") if len(data_k) > 0 else "2020-01-01 00:00:00")
+                map_obj_sesi[s_id] = (w_mulai, w_tutup)
 
             pilihan_target_hapus = st.selectbox("Pilih Sesi Yang Ingin Dihapus:", options=list_pilihan_sesi_hapus)
-            konfirm_h_sesi_db = st.checkbox("Saya yakin ingin menghapus data riwayat sesi ini secara permanen", key="chk_del_sesi_db")
+            konfirm_h_sesi_db = st.checkbox("Saya yakin ingin menghapus data riwayat sesi ini beserta SEMUA transaksi didalamnya secara permanen", key="chk_del_sesi_db")
             
             if konfirm_h_sesi_db:
-                if st.button("❌ Hapus Sesi Dari Database", type="primary"):
+                if st.button("❌ Hapus Sesi & Transaksinya", type="primary"):
                     target_id = map_id_sesi[pilihan_target_hapus]
+                    w_mulai_target, w_tutup_target = map_obj_sesi[target_id]
+                    
+                    # 1. Hapus transaksi yang masuk dalam rentang waktu sesi tersebut
+                    if data_t:
+                        for t_row in data_t:
+                            t_waktu = t_row.get('waktu', '')
+                            if w_mulai_target <= t_waktu <= w_tutup_target:
+                                db_delete("transaksi", t_row['id'])
+
+                    # 2. Hapus baris riwayat sesi dari database
                     if db_delete("riwayat_sesi", target_id):
+                        if 'waktu_mulai_sesi' in st.session_state: del st.session_state['waktu_mulai_sesi']
                         st.cache_data.clear()
-                        st.success("Baris riwayat sesi berhasil dihapus!")
-                        time.sleep(0.5)
+                        st.success("Sesi dan seluruh transaksi di dalamnya berhasil dihapus permanen!")
+                        time.sleep(1)
                         st.rerun()
                     else:
                         st.error("Gagal menghapus baris sesi!")
