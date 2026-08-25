@@ -1089,11 +1089,21 @@ with tab3:
 
 # --- TAB 4: STOK BARANG ---
 with tab4:
-    existing_categories = ["Perdana", "Voucher", "Aksesoris", "Umum"]
+    # --- AMBIL KATEGORI MURNI HANYA DARI BARANG YANG ADA DI DATABASE ---
+    existing_categories = []
     if data_s and len(data_s) > 0:
         for r in data_s:
             kat_val = r.get('kategori')
-            if kat_val and kat_val not in existing_categories: existing_categories.append(kat_val)
+            if kat_val and kat_val.strip():
+                clean_kat = kat_val.strip()
+                if clean_kat not in existing_categories:
+                    existing_categories.append(clean_kat)
+    
+    # Jika benar-benar kosong sama sekali, beri cadangan default
+    if not existing_categories:
+        existing_categories = ["Umum"]
+    else:
+        existing_categories = sorted(existing_categories)
 
     with st.expander("➕ Tambah Barang Baru"):
         nama_barang = st.text_input("Nama Barang:")
@@ -1115,7 +1125,7 @@ with tab4:
         
         if st.button("💾 Simpan Barang", type="primary", use_container_width=True, disabled=st.session_state['is_submitting']):
             st.session_state['is_submitting'] = True
-            final_kat = kategori_barang if kategori_barang.strip() else "Umum"
+            final_kat = kategori_barang.strip() if kategori_barang.strip() else "Umum"
             if nama_barang:
                 sukses_s, err_s = db_insert("stok", {
                     "barcode": kode_cepat_brg, "nama_barang": nama_barang, "stok": int(stok_awal),
@@ -1201,7 +1211,7 @@ with tab4:
                     else: es_kat = es_pilih_kat
                     
                     if st.form_submit_button("Simpan Perubahan Stok"):
-                        final_es_kat = es_kat if es_kat.strip() else kat
+                        final_es_kat = es_kat.strip() if es_kat.strip() else kat
                         sukses_up_stk, _ = db_update("stok", r_id, {
                             "barcode": es_kod, "nama_barang": es_nm, "stok": int(es_stk),
                             "harga_modal": int(es_mod), "harga_jual": int(es_jul),
@@ -1225,7 +1235,7 @@ with tab4:
                 st.cache_data.clear()
                 st.success("Barang terpilih berhasil dihapus!")
                 time.sleep(0.5)
-                st.rerun()
+                st.reron() if hasattr(st, 'rerun') else st.experimental_rerun()
     else:
         st.info("Belum ada data stok.")
 
