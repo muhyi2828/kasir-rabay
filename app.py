@@ -264,29 +264,46 @@ with col_head1:
 with col_head2:
     st.markdown("<div style='margin-top: -53px;'>", unsafe_allow_html=True)
     with st.popover("≡", help="Menu Setelan"):
-        st.markdown("<h3 style='text-align:center; color:#14B8A6; margin-top:0;'>PENGATURAN</h3>", unsafe_allow_html=True)
         
-        # --- TOTAL PROFIT BULAN INI BERDASARKAN RIWAYAT SESI YANG DIARSIPKAN ---
+        # --- HITUNG OMZET & PROFIT BULAN INI (DARI TANGGAL 01) ---
         total_profit_bulan_ini = 0
+        total_omzet_bulan_ini = 0
+        
+        now_jkt = datetime.now(pytz.timezone('Asia/Jakarta'))
+        current_year = now_jkt.year
+        current_month = now_jkt.month
+
+        # 1. Dari Riwayat Sesi yang diarsipkan bulan ini
         if data_sesi and len(data_sesi) > 0:
             df_sesi_prof = pd.DataFrame(data_sesi)
             df_sesi_prof['Waktu_Tutup_Parsed'] = pd.to_datetime(df_sesi_prof['waktu_tutup_sesi'], errors='coerce')
-            
-            now_jkt = datetime.now(pytz.timezone('Asia/Jakarta'))
-            current_year = now_jkt.year
-            current_month = now_jkt.month
             
             df_sesi_bulan_ini = df_sesi_prof[
                 (df_sesi_prof['Waktu_Tutup_Parsed'].dt.year == current_year) & 
                 (df_sesi_prof['Waktu_Tutup_Parsed'].dt.month == current_month)
             ]
             if not df_sesi_bulan_ini.empty:
-                total_profit_bulan_ini = pd.to_numeric(df_sesi_bulan_ini['total_profit'], errors='coerce').fillna(0).sum()
+                total_profit_bulan_ini += pd.to_numeric(df_sesi_bulan_ini['total_profit'], errors='coerce').fillna(0).sum()
+
+        # 2. Dari Transaksi berjalan bulan ini (baik sesi aktif maupun yang sudah tertutup di bulan yang sama)
+        if data_t and len(data_t) > 0:
+            df_trx_all = pd.DataFrame(data_t)
+            df_trx_all['Waktu_Parsed'] = pd.to_datetime(df_trx_all['waktu'], errors='coerce')
+            df_trx_bulan_ini = df_trx_all[
+                (df_trx_all['Waktu_Parsed'].dt.year == current_year) & 
+                (df_trx_all['Waktu_Parsed'].dt.month == current_month)
+            ]
+            if not df_trx_bulan_ini.empty:
+                total_profit_bulan_ini += pd.to_numeric(df_trx_bulan_ini['profit'], errors='coerce').fillna(0).sum()
+                total_omzet_bulan_ini += pd.to_numeric(df_trx_bulan_ini['total'], errors='coerce').fillna(0).sum()
 
         st.markdown(f"""
             <div style="background-color:#1E1E1E; padding:15px; border-radius:10px; border:1px solid #14B8A6; text-align:center; margin-bottom:20px;">
-                <span style="color:#aaa; font-size:13px; font-weight:bold;">TOTAL PROFIT BULAN INI</span><br>
-                <span style="color:#14B8A6; font-size:22px; font-weight:bold;">{f_uang(total_profit_bulan_ini)}</span>
+                <span style="color:#aaa; font-size:12px; font-weight:bold;">TOTAL OMZET BULAN INI</span><br>
+                <span style="color:#ffffff; font-size:18px; font-weight:bold; margin-bottom:8px; display:block;">{f_uang(total_omzet_bulan_ini)}</span>
+                <hr style="border-color:#333; margin:8px 0;">
+                <span style="color:#aaa; font-size:12px; font-weight:bold;">TOTAL PROFIT BULAN INI</span><br>
+                <span style="color:#14B8A6; font-size:20px; font-weight:bold;">{f_uang(total_profit_bulan_ini)}</span>
             </div>
         """, unsafe_allow_html=True)
 
@@ -991,7 +1008,6 @@ with tab3:
                     if jns in ["Penjualan Barang", "Transaksi Lainnya"]: tot_transaksi_cash += tot
                     elif jns == "Tarik Tunai":
                         tot_transaksi_cash -= tot
-                        tot_digi_s += nom # diperbaiki ke bawah
                         tot_transaksi_digi += nom
                     else: 
                         tot_transaksi_digi -= nom
@@ -1393,7 +1409,7 @@ with tab5:
 
         st.markdown("<br>", unsafe_allow_html=True)
         if st.button("📦 ARSIPKAN & RESET GAJI", type="primary", use_container_width=True):
-            waktu_arsip = datetime.now(pytz.timezone('Asia/Jakarta')).strftime("%Y-%m-%d %H:%M:%S")
+            waktu_arsip = datetime.now(pytz.timezone('Asia/Jakarta')).strftime("%Y-%m-d %H:%M:%S")
             for row_a in data_gaji_aktif:
                 db_update("gaji_karyawan", row_a['id'], {
                     "status": "Arsip",
