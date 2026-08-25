@@ -1089,7 +1089,6 @@ with tab3:
 
 # --- TAB 4: STOK BARANG ---
 with tab4:
-    # --- AMBIL KATEGORI MURNI HANYA DARI BARANG YANG ADA DI DATABASE ---
     existing_categories = []
     if data_s and len(data_s) > 0:
         for r in data_s:
@@ -1099,7 +1098,6 @@ with tab4:
                 if clean_kat not in existing_categories:
                     existing_categories.append(clean_kat)
     
-    # Jika benar-benar kosong sama sekali, beri cadangan default
     if not existing_categories:
         existing_categories = ["Umum"]
     else:
@@ -1124,13 +1122,26 @@ with tab4:
         kode_cepat_brg = st.text_input("Kode Cepat / Barcode (Contoh: AXIS99, VCG1):")
         
         if st.button("💾 Simpan Barang", type="primary", use_container_width=True, disabled=st.session_state['is_submitting']):
-            st.session_state['is_submitting'] = True
             final_kat = kategori_barang.strip() if kategori_barang.strip() else "Umum"
-            if nama_barang:
+            
+            # --- CEK APAKAH KODE CEPAT SUDAH DIGUNAKAN ---
+            kode_sudah_pakai = False
+            if kode_cepat_brg.strip() and data_s:
+                for item_cek in data_s:
+                    if str(item_cek.get('kode_cepat', '')).upper() == kode_cepat_brg.strip().upper():
+                        kode_sudah_pakai = True
+                        break
+
+            if kode_sudah_pakai:
+                st.error(f"❌ Gagal menyimpan! Kode cepat / barcode '**{kode_cepat_brg.strip()}**' sudah digunakan oleh barang lain.")
+            elif not nama_barang:
+                st.error("Nama barang tidak boleh kosong!")
+            else:
+                st.session_state['is_submitting'] = True
                 sukses_s, err_s = db_insert("stok", {
-                    "barcode": kode_cepat_brg, "nama_barang": nama_barang, "stok": int(stok_awal),
+                    "barcode": kode_cepat_brg.strip(), "nama_barang": nama_barang, "stok": int(stok_awal),
                     "harga_modal": int(harga_modal), "harga_jual": int(harga_jual),
-                    "kode_cepat": kode_cepat_brg, "kategori": final_kat
+                    "kode_cepat": kode_cepat_brg.strip(), "kategori": final_kat
                 })
                 st.cache_data.clear()
                 st.session_state['is_submitting'] = False
@@ -1212,18 +1223,30 @@ with tab4:
                     
                     if st.form_submit_button("Simpan Perubahan Stok"):
                         final_es_kat = es_kat.strip() if es_kat.strip() else kat
-                        sukses_up_stk, _ = db_update("stok", r_id, {
-                            "barcode": es_kod, "nama_barang": es_nm, "stok": int(es_stk),
-                            "harga_modal": int(es_mod), "harga_jual": int(es_jul),
-                            "kode_cepat": es_kod, "kategori": final_es_kat
-                        })
-                        if sukses_up_stk:
-                            st.session_state[f"mode_edit_stk_{r_id}"] = False
-                            st.cache_data.clear()
-                            st.success("Stok diperbarui!")
-                            time.sleep(0.5)
-                            st.rerun()
-                        else: st.error("Gagal perbarui stok!")
+                        
+                        # --- CEK DUPLIKAT KODE SAAT EDIT ---
+                        kode_edit_sudah_pakai = False
+                        if es_kod.strip() and data_s:
+                            for item_cek in data_s:
+                                if item_cek.get('id') != r_id and str(item_cek.get('kode_cepat', '')).upper() == es_kod.strip().upper():
+                                    kode_edit_sudah_pakai = True
+                                    break
+
+                        if kode_edit_sudah_pakai:
+                            st.error(f"❌ Gagal menyimpan! Kode cepat / barcode '**{es_kod.strip()}**' sudah digunakan oleh barang lain.")
+                        else:
+                            sukses_up_stk, _ = db_update("stok", r_id, {
+                                "barcode": es_kod.strip(), "nama_barang": es_nm, "stok": int(es_stk),
+                                "harga_modal": int(es_mod), "harga_jual": int(es_jul),
+                                "kode_cepat": es_kod.strip(), "kategori": final_es_kat
+                            })
+                            if sukses_up_stk:
+                                st.session_state[f"mode_edit_stk_{r_id}"] = False
+                                st.cache_data.clear()
+                                st.success("Stok diperbarui!")
+                                time.sleep(0.5)
+                                st.rerun()
+                            else: st.error("Gagal perbarui stok!")
 
             st.markdown("<hr style='margin:5px 0; border-color:#333;'>", unsafe_allow_html=True)
 
@@ -1235,7 +1258,7 @@ with tab4:
                 st.cache_data.clear()
                 st.success("Barang terpilih berhasil dihapus!")
                 time.sleep(0.5)
-                st.reron() if hasattr(st, 'rerun') else st.experimental_rerun()
+                st.rerun()
     else:
         st.info("Belum ada data stok.")
 
