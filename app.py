@@ -79,6 +79,25 @@ def get_master_credentials(sb):
 
 db_user, db_pass = get_master_credentials(supabase)
 
+# --- AMBIL DAFTAR CABANG DARI DATABASE ---
+def fetch_daftar_cabang(sb):
+    default_cabang = {"RABAY01": "Pusat", "Medang": "Cabang 2", "G. BATU": "Cabang 3"}
+    if not sb: return default_cabang
+    try:
+        res = sb.table("cabang").select("*").execute()
+        if res.data and len(res.data) > 0:
+            return {item['kode']: item['nama_tampilan'] for item in res.data}
+        else:
+            # Jika tabel kosong, inisialisasi default ke DB
+            for k, v in default_cabang.items():
+                sb.table("cabang").insert({"kode": k, "nama_tampilan": v}).execute()
+            return default_cabang
+    except:
+        return default_cabang
+
+mapping_cabang = fetch_daftar_cabang(supabase)
+daftar_tampilan_cabang = list(mapping_cabang.keys())
+
 # --- SISTEM LOGIN MASTER ---
 if 'is_logged_in' not in st.session_state:
     if st.query_params.get("auth") == "1":
@@ -86,18 +105,11 @@ if 'is_logged_in' not in st.session_state:
     else:
         st.session_state['is_logged_in'] = False
 
-mapping_cabang = {
-    "RABAY01": "Pusat",
-    "Medang": "Cabang 2",
-    "G. BATU": "Cabang 3"
-}
-daftar_tampilan_cabang = list(mapping_cabang.keys())
-
 if 'cabang_terpilih' not in st.session_state:
     if st.query_params.get("cabang") and st.query_params.get("cabang") in daftar_tampilan_cabang:
         st.session_state['cabang_terpilih'] = st.query_params.get("cabang")
     else:
-        st.session_state['cabang_terpilih'] = "RABAY01"
+        st.session_state['cabang_terpilih'] = daftar_tampilan_cabang[0] if daftar_tampilan_cabang else "RABAY01"
 
 if not st.session_state['is_logged_in']:
     st.markdown('<div class="login-box">', unsafe_allow_html=True)
@@ -242,9 +254,10 @@ def hitung_admin(nominal, jenis):
 # --- HEADER UTAMA DENGAN TOMBOL POPUP MENU DI DALAMNYA ---
 col_head1, col_head2 = st.columns([6, 1])
 with col_head1:
+    nama_cabang_tampil = mapping_cabang.get(st.session_state['cabang_terpilih'], st.session_state['cabang_terpilih'])
     st.markdown(f"""
         <div class="rabay-header">
-            <h1>RABAY CELL - {st.session_state['cabang_terpilih'].upper()}</h1>
+            <h1>RABAY CELL - {nama_cabang_tampil.upper()}</h1>
         </div>
     """, unsafe_allow_html=True)
 
@@ -280,7 +293,7 @@ with col_head2:
         st.markdown("---")
         st.write("**Ganti Akses Cabang Ke:**")
         idx_cabang_aktif = daftar_tampilan_cabang.index(st.session_state['cabang_terpilih']) if st.session_state['cabang_terpilih'] in daftar_tampilan_cabang else 0
-        pilihan_pindah = st.selectbox("Cabang", daftar_tampilan_cabang, index=idx_cabang_aktif, label_visibility="collapsed")
+        pilihan_pindah = st.selectbox("Cabang", daftar_tampilan_cabang, format_func=lambda x: f"{x} ({mapping_cabang.get(x, '')})", index=idx_cabang_aktif, label_visibility="collapsed")
         
         if st.button("PINDAH CABANG", type="primary", use_container_width=True):
             st.session_state['cabang_terpilih'] = pilihan_pindah
@@ -293,6 +306,40 @@ with col_head2:
             st.cache_data.clear()
             st.success(f"Berhasil pindah akses ke {pilihan_pindah}!")
             st.rerun()
+
+        st.markdown("---")
+        st.markdown("🏢 **Manajemen Cabang**")
+        with st.expander("➕ Tambah / Kelola Cabang"):
+            with st.form("form_tambah_cabang_ baru"):
+                kode_baru = st.text_input("Kode Cabang (Unik, misal: Cabang4)")
+                nama_tampil_baru = st.text_input("Nama Tampilan (misal: Cabang 4)")
+                if st.form_submit_button("Simpan Cabang Baru"):
+                    if kode_baru and nama_tampil_baru:
+                        try:
+                            supabase.table("cabang").insert({"kode": kode_baru.strip(), "nama_tampilan": nama_tampil_baru.strip()}).execute()
+                            st.cache_data.clear()
+                            st.success("Cabang baru berhasil ditambahkan!")
+                            time.sleep(0.5)
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Gagal tambah cabang: {e}")
+                    else:
+                        st.error("Semua kolom harus diisi!")
+
+            if len(daftar_tampilan_cabang) > 1:
+                cabang_dihapus = st.selectbox("Pilih Cabang untuk Dihapus:", options=daftar_tampilan_cabang)
+                if st.button("🗑️ Hapus Cabang Ini", type="primary"):
+                    try:
+                        supabase.table("cabang").delete().eq("kode", cabang_dihapus).execute()
+                        st.cache_data.clear()
+                        st.success(f"Cabang {cabang_dihapus} berhasil dihapus!")
+                        if st.session_state['cabang_terpilih'] == cabang_dihapus:
+                            st.session_state['cabang_terpilih'] = "RABAY01"
+                            st.query_params["cabang"] = "RABAY01"
+                        time.sleep(0.5)
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Gagal menghapus cabang: {e}")
 
         st.markdown("---")
         st.markdown("🔐 **Akun Master (Kontrol Cabang)**")
