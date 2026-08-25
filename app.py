@@ -88,7 +88,6 @@ def fetch_daftar_cabang(sb):
         if res.data and len(res.data) > 0:
             return {item['kode']: item['nama_tampilan'] for item in res.data}
         else:
-            # Jika tabel kosong, inisialisasi default ke DB
             for k, v in default_cabang.items():
                 sb.table("cabang").insert({"kode": k, "nama_tampilan": v}).execute()
             return default_cabang
@@ -310,7 +309,7 @@ with col_head2:
         st.markdown("---")
         st.markdown("🏢 **Manajemen Cabang**")
         with st.expander("➕ Tambah / Kelola Cabang"):
-            with st.form("form_tambah_cabang_ baru"):
+            with st.form("form_tambah_cabang_baru"):
                 kode_baru = st.text_input("Kode Cabang (Unik, misal: Cabang4)")
                 nama_tampil_baru = st.text_input("Nama Tampilan (misal: Cabang 4)")
                 if st.form_submit_button("Simpan Cabang Baru"):
@@ -423,7 +422,10 @@ with tab1:
         jenis_terpilih = st.radio("Jenis", pilihan_jenis, index=current_idx, horizontal=True, label_visibility="collapsed", disabled=modal_belum_diisi)
         
         if nama_brg_det and jenis_terpilih == "Penjualan Barang":
-            st.success(f"📦 Terdeteksi: **{nama_brg_det}** (Sisa Stok: {stok_sisa_brg}) | Untung: **{f_uang(profit_brg_det)}**")
+            if stok_sisa_brg <= 0:
+                st.error(f"📦 Terdeteksi: **{nama_brg_det}** | ⚠️ **STOK HABIS (0)** | Untung: **{f_uang(profit_brg_det)}**")
+            else:
+                st.success(f"📦 Terdeteksi: **{nama_brg_det}** (Sisa Stok: {stok_sisa_brg}) | Untung: **{f_uang(profit_brg_det)}**")
 
         st.markdown("<br>", unsafe_allow_html=True)
         st.caption("Nominal / Harga (Rp):")
@@ -469,8 +471,7 @@ with tab1:
                     waktu = datetime.now(pytz.timezone('Asia/Jakarta')).strftime("%Y-%m-%d %H:%M:%S")
                     
                     if jenis_terpilih == "Penjualan Barang" and row_id_stok:
-                        if stok_sisa_brg > 0:
-                            db_update("stok", row_id_stok, {"stok": stok_sisa_brg - 1})
+                        db_update("stok", row_id_stok, {"stok": max(0, stok_sisa_brg - 1)})
                     
                     sukses, err_msg = db_insert("transaksi", {
                         "waktu": waktu, "jenis": jenis_terpilih, "nominal": int(nominal_trx),
@@ -537,7 +538,7 @@ with tab1:
                     r_stok = item['Row_Stok']
                     s_stk = item['Sisa_Stok']
                     
-                    if j_trx == "Penjualan Barang" and r_stok and s_stk > 0:
+                    if j_trx == "Penjualan Barang" and r_stok:
                         stok_baru = max(0, s_stk - qty)
                         db_update("stok", r_stok, {"stok": stok_baru})
                     
@@ -722,8 +723,7 @@ with tab1:
                         for s_item in data_s:
                             if s_item.get('id') == r_id:
                                 current_stk = int(s_item.get('stok', 0))
-                                if current_stk > 0:
-                                    db_update("stok", r_id, {"stok": current_stk - 1})
+                                db_update("stok", r_id, {"stok": max(0, current_stk - 1)})
                                 break
 
                     sukses_ins, err_ins = db_insert("transaksi", {
@@ -1104,7 +1104,7 @@ with tab4:
             kategori_barang = st.text_input("Ketik Nama Kategori Baru:", value="", key="input_kat_baru_tambah")
         else: kategori_barang = pilih_kat_tambah
 
-        stok_awal = st.number_input("Jumlah Stok:", min_value=1, step=1)
+        stok_awal = st.number_input("Jumlah Stok:", min_value=0, step=1, value=1)
         harga_modal = st.number_input("Harga Modal (Rp):", min_value=0, step=1000)
         if harga_modal > 0: st.caption(f"👀 Terbaca: **{f_uang(harga_modal)}**")
             
@@ -1176,7 +1176,10 @@ with tab4:
                 is_checked_stok = st.checkbox("Pilih Stok", key=f"chk_stok_{r_id}", label_visibility="collapsed")
                 if is_checked_stok: list_stok_terpilih.append(r_id)
             with c_info:
-                st.markdown(f"**{nm}** | <span style='color:#14B8A6;'>[{kat}]</span> (Stok: {stk})<br>Modal: {f_uang(mod_val)} | Jual: {f_uang(jul_val)}<br><b style='color:#14B8A6;'>TOTAL MODAL: {f_uang(total_modal_item)}</b>", unsafe_allow_html=True)
+                if stk == 0:
+                    st.markdown(f"<span style='color:#FF4B4B; font-weight:bold; font-size:16px;'>⚠️ [STOK KOSONG] {nm}</span> | <span style='color:#14B8A6;'>[{kat}]</span> (Stok: 0)<br>Modal: {f_uang(mod_val)} | Jual: {f_uang(jul_val)}<br><b style='color:#14B8A6;'>TOTAL MODAL: {f_uang(total_modal_item)}</b>", unsafe_allow_html=True)
+                else:
+                    st.markdown(f"**{nm}** | <span style='color:#14B8A6;'>[{kat}]</span> (Stok: {stk})<br>Modal: {f_uang(mod_val)} | Jual: {f_uang(jul_val)}<br><b style='color:#14B8A6;'>TOTAL MODAL: {f_uang(total_modal_item)}</b>", unsafe_allow_html=True)
             
             if st.button("✏️ Edit Data Barang", key=f"edit_stok_btn_{r_id}", use_container_width=True): 
                 st.session_state[f"mode_edit_stk_{r_id}"] = True
@@ -1185,7 +1188,7 @@ with tab4:
                 with st.form(key=f"form_edit_stok_{r_id}"):
                     st.write(f"Edit Data: {nm}")
                     es_nm = st.text_input("Nama Barang", value=nm)
-                    es_stk = st.number_input("Stok", value=int(stk), step=1)
+                    es_stk = st.number_input("Stok", min_value=0, value=int(stk), step=1)
                     es_mod = st.number_input("Harga Modal", value=int(mod_val), step=1000)
                     es_jul = st.number_input("Harga Jual", value=int(jul_val), step=1000)
                     es_kod = st.text_input("Kode Cepat / Barcode", value=row.get('kode_cepat', ''))
