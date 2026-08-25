@@ -273,7 +273,6 @@ with col_head2:
         current_year = now_jkt.year
         current_month = now_jkt.month
 
-        # 1. Dari Riwayat Sesi yang diarsipkan bulan ini
         if data_sesi and len(data_sesi) > 0:
             df_sesi_prof = pd.DataFrame(data_sesi)
             df_sesi_prof['Waktu_Tutup_Parsed'] = pd.to_datetime(df_sesi_prof['waktu_tutup_sesi'], errors='coerce')
@@ -285,7 +284,6 @@ with col_head2:
             if not df_sesi_bulan_ini.empty:
                 total_profit_bulan_ini += pd.to_numeric(df_sesi_bulan_ini['total_profit'], errors='coerce').fillna(0).sum()
 
-        # 2. Dari Transaksi berjalan bulan ini (baik sesi aktif maupun yang sudah tertutup di bulan yang sama)
         if data_t and len(data_t) > 0:
             df_trx_all = pd.DataFrame(data_t)
             df_trx_all['Waktu_Parsed'] = pd.to_datetime(df_trx_all['waktu'], errors='coerce')
@@ -1050,7 +1048,7 @@ with tab3:
         </div>
     """, unsafe_allow_html=True)
 
-    # --- HALAMAN CATATAN HARIAN ---
+    # --- HALAMAN CATATAN HARIAN (TERSINKRONISASI KE SUPABASE) ---
     st.markdown("---")
     st.markdown("### 📝 Catatan / Catatan Penting Sesi Ini")
     
@@ -1060,7 +1058,13 @@ with tab3:
         catatan_terkini_text = data_catatan[0].get("isi_catatan", "")
         catatan_row_id = data_catatan[0].get("id")
 
-    input_catatan_user = st.text_area("Tulis catatan atau pengingat di sini:", value=catatan_terkini_text, height=120, placeholder="Tulis catatan harian, hutang pelanggan, atau hal penting lainnya di sini...")
+    input_catatan_user = st.text_area(
+        "Tulis catatan atau pengingat di sini:", 
+        value=catatan_terkini_text, 
+        height=120, 
+        placeholder="Tulis catatan harian, hutang pelanggan, atau hal penting lainnya di sini...",
+        key="txt_area_catatan_db"
+    )
 
     col_btn_ct1, col_btn_ct2 = st.columns(2)
     with col_btn_ct1:
@@ -1071,7 +1075,7 @@ with tab3:
                 else:
                     db_insert("catatan_harian", {"isi_catatan": input_catatan_user})
                 st.cache_data.clear()
-                st.success("Catatan berhasil disimpan!")
+                st.success("Catatan berhasil disimpan ke database!")
                 time.sleep(0.5)
                 st.rerun()
             except Exception as e:
@@ -1083,7 +1087,7 @@ with tab3:
                 if catatan_row_id is not None:
                     db_delete("catatan_harian", catatan_row_id)
                 st.cache_data.clear()
-                st.success("Catatan berhasil dihapus!")
+                st.success("Catatan berhasil dihapus dari database!")
                 time.sleep(0.5)
                 st.rerun()
             except Exception as e:
@@ -1409,7 +1413,7 @@ with tab5:
 
         st.markdown("<br>", unsafe_allow_html=True)
         if st.button("📦 ARSIPKAN & RESET GAJI", type="primary", use_container_width=True):
-            waktu_arsip = datetime.now(pytz.timezone('Asia/Jakarta')).strftime("%Y-%m-d %H:%M:%S")
+            waktu_arsip = datetime.now(pytz.timezone('Asia/Jakarta')).strftime("%Y-%m-%d %H:%M:%S")
             for row_a in data_gaji_aktif:
                 db_update("gaji_karyawan", row_a['id'], {
                     "status": "Arsip",
