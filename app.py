@@ -172,9 +172,14 @@ with st.spinner("⏳ Sinkronisasi Database Supabase..."):
     data_k = fetch_table_data("kas", cabang_aktif)
     data_sesi = fetch_table_data("riwayat_sesi", cabang_aktif)
     data_gaji = fetch_table_data("gaji_karyawan", cabang_aktif)
-    data_catatan = fetch_table_data("catatan_harian", cabang_aktif)
+    
+    try:
+        res_cat = supabase.table("catatan_harian").select("*").eq("cabang", cabang_aktif).execute()
+        data_catatan = res_cat.data if res_cat.data else []
+    except:
+        data_catatan = []
 
-if data_t is None or data_s is None or data_k is None or data_sesi is None or data_gaji is None or data_catatan is None:
+if data_t is None or data_s is None or data_k is None or data_sesi is None or data_gaji is None:
     st.error("⚠️ Gagal terhubung ke Supabase. Periksa kembali URL dan Kunci API Anda.")
     st.stop()
 
@@ -265,7 +270,6 @@ with col_head2:
     st.markdown("<div style='margin-top: -53px;'>", unsafe_allow_html=True)
     with st.popover("≡", help="Menu Setelan"):
         
-        # --- HITUNG OMZET & PROFIT BULAN INI (DARI TANGGAL 01) ---
         total_profit_bulan_ini = 0
         total_omzet_bulan_ini = 0
         
@@ -1048,33 +1052,32 @@ with tab3:
         </div>
     """, unsafe_allow_html=True)
 
-    # --- HALAMAN CATATAN HARIAN (TERSINKRONISASI KE SUPABASE) ---
+    # --- HALAMAN CATATAN HARIAN (MENGGUNAKAN UPSERT SUPABASE) ---
     st.markdown("---")
     st.markdown("### 📝 Catatan / Catatan Penting Sesi Ini")
     
     catatan_terkini_text = ""
-    catatan_row_id = None
     if data_catatan and len(data_catatan) > 0:
         catatan_terkini_text = data_catatan[0].get("isi_catatan", "")
-        catatan_row_id = data_catatan[0].get("id")
 
     input_catatan_user = st.text_area(
         "Tulis catatan atau pengingat di sini:", 
         value=catatan_terkini_text, 
         height=120, 
         placeholder="Tulis catatan harian, hutang pelanggan, atau hal penting lainnya di sini...",
-        key="txt_area_catatan_db"
+        key="txt_area_catatan_upsert"
     )
 
     col_btn_ct1, col_btn_ct2 = st.columns(2)
     with col_btn_ct1:
         if st.button("💾 Simpan Catatan", type="primary", use_container_width=True):
             try:
-                if catatan_row_id is not None:
-                    db_update("catatan_harian", catatan_row_id, {"isi_catatan": input_catatan_user})
-                else:
-                    db_insert("catatan_harian", {"isi_catatan": input_catatan_user})
-                st.cache_data.clear()
+                # Menggunakan upsert agar otomatis update jika sudah ada, atau insert jika belum
+                supabase.table("catatan_harian").upsert({
+                    "cabang": cabang_aktif,
+                    "isi_catatan": input_catatan_user
+                }, on_conflict="cabang").execute()
+                
                 st.success("Catatan berhasil disimpan ke database!")
                 time.sleep(0.5)
                 st.rerun()
@@ -1084,9 +1087,11 @@ with tab3:
     with col_btn_ct2:
         if st.button("🗑️ Hapus Catatan", use_container_width=True):
             try:
-                if catatan_row_id is not None:
-                    db_delete("catatan_harian", catatan_row_id)
-                st.cache_data.clear()
+                supabase.table("catatan_harian").upsert({
+                    "cabang": cabang_aktif,
+                    "isi_catatan": ""
+                }, on_conflict="cabang").execute()
+                
                 st.success("Catatan berhasil dihapus dari database!")
                 time.sleep(0.5)
                 st.rerun()
