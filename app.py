@@ -172,8 +172,9 @@ with st.spinner("⏳ Sinkronisasi Database Supabase..."):
     data_k = fetch_table_data("kas", cabang_aktif)
     data_sesi = fetch_table_data("riwayat_sesi", cabang_aktif)
     data_gaji = fetch_table_data("gaji_karyawan", cabang_aktif)
+    data_catatan = fetch_table_data("catatan_harian", cabang_aktif)
 
-if data_t is None or data_s is None or data_k is None or data_sesi is None or data_gaji is None:
+if data_t is None or data_s is None or data_k is None or data_sesi is None or data_gaji is None or data_catatan is None:
     st.error("⚠️ Gagal terhubung ke Supabase. Periksa kembali URL dan Kunci API Anda.")
     st.stop()
 
@@ -990,6 +991,7 @@ with tab3:
                     if jns in ["Penjualan Barang", "Transaksi Lainnya"]: tot_transaksi_cash += tot
                     elif jns == "Tarik Tunai":
                         tot_transaksi_cash -= tot
+                        tot_digi_s += nom # diperbaiki ke bawah
                         tot_transaksi_digi += nom
                     else: 
                         tot_transaksi_digi -= nom
@@ -1031,6 +1033,45 @@ with tab3:
             <span style="color:#14B8A6; font-size:24px; font-weight:bold;">{f_uang(hasil_akhir_digi)}</span>
         </div>
     """, unsafe_allow_html=True)
+
+    # --- HALAMAN CATATAN HARIAN ---
+    st.markdown("---")
+    st.markdown("### 📝 Catatan / Catatan Penting Sesi Ini")
+    
+    catatan_terkini_text = ""
+    catatan_row_id = None
+    if data_catatan and len(data_catatan) > 0:
+        catatan_terkini_text = data_catatan[0].get("isi_catatan", "")
+        catatan_row_id = data_catatan[0].get("id")
+
+    input_catatan_user = st.text_area("Tulis catatan atau pengingat di sini:", value=catatan_terkini_text, height=120, placeholder="Tulis catatan harian, hutang pelanggan, atau hal penting lainnya di sini...")
+
+    col_btn_ct1, col_btn_ct2 = st.columns(2)
+    with col_btn_ct1:
+        if st.button("💾 Simpan Catatan", type="primary", use_container_width=True):
+            try:
+                if catatan_row_id is not None:
+                    db_update("catatan_harian", catatan_row_id, {"isi_catatan": input_catatan_user})
+                else:
+                    db_insert("catatan_harian", {"isi_catatan": input_catatan_user})
+                st.cache_data.clear()
+                st.success("Catatan berhasil disimpan!")
+                time.sleep(0.5)
+                st.rerun()
+            except Exception as e:
+                st.error(f"Gagal menyimpan catatan: {e}")
+                
+    with col_btn_ct2:
+        if st.button("🗑️ Hapus Catatan", use_container_width=True):
+            try:
+                if catatan_row_id is not None:
+                    db_delete("catatan_harian", catatan_row_id)
+                st.cache_data.clear()
+                st.success("Catatan berhasil dihapus!")
+                time.sleep(0.5)
+                st.rerun()
+            except Exception as e:
+                st.error(f"Gagal menghapus catatan: {e}")
 
     st.markdown("---")
     st.markdown("### 📜 Riwayat Sesi Kerja Sebelumnya")
@@ -1124,7 +1165,6 @@ with tab4:
         if st.button("💾 Simpan Barang", type="primary", use_container_width=True, disabled=st.session_state['is_submitting']):
             final_kat = kategori_barang.strip() if kategori_barang.strip() else "Umum"
             
-            # --- CEK APAKAH KODE CEPAT SUDAH DIGUNAKAN ---
             kode_sudah_pakai = False
             if kode_cepat_brg.strip() and data_s:
                 for item_cek in data_s:
@@ -1224,7 +1264,6 @@ with tab4:
                     if st.form_submit_button("Simpan Perubahan Stok"):
                         final_es_kat = es_kat.strip() if es_kat.strip() else kat
                         
-                        # --- CEK DUPLIKAT KODE SAAT EDIT ---
                         kode_edit_sudah_pakai = False
                         if es_kod.strip() and data_s:
                             for item_cek in data_s:
