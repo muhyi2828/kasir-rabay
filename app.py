@@ -1072,7 +1072,6 @@ with tab3:
     with col_btn_ct1:
         if st.button("💾 Simpan Catatan", type="primary", use_container_width=True):
             try:
-                # Menggunakan upsert agar otomatis update jika sudah ada, atau insert jika belum
                 supabase.table("catatan_harian").upsert({
                     "cabang": cabang_aktif,
                     "isi_catatan": input_catatan_user
@@ -1234,15 +1233,30 @@ with tab4:
 
     if data_s and len(data_s) > 0:
         df_s = pd.DataFrame(data_s)
-        
-        if 'nama_barang' in df_s.columns:
-            df_s = df_s.sort_values(by='nama_barang', key=lambda col: col.str.lower()).reset_index(drop=True)
 
         list_kategori_filter = ["Semua Kategori"] + sorted(df_s['kategori'].dropna().unique().tolist())
         pilih_filter_kat = st.selectbox("Filter Berdasarkan Kategori:", options=list_kategori_filter)
         
         df_s_filtered = df_s.copy()
-        if pilih_filter_kat != "Semua Kategori": df_s_filtered = df_s_filtered[df_s_filtered['kategori'] == pilih_filter_kat]
+        if pilih_filter_kat != "Semua Kategori": 
+            df_s_filtered = df_s_filtered[df_s_filtered['kategori'] == pilih_filter_kat]
+
+        # --- FITUR URUTKAN STOK ---
+        pilihan_urut = st.selectbox(
+            "Urutkan Berdasarkan:", 
+            options=[
+                "Nama Barang (A-Z)", 
+                "Stok: Sedikit ke Terbanyak (0 -> Max)", 
+                "Stok: Terbanyak ke Sedikit (Max -> 0)"
+            ]
+        )
+
+        if pilihan_urut == "Stok: Sedikit ke Terbanyak (0 -> Max)":
+            df_s_filtered = df_s_filtered.sort_values(by='stok', ascending=True).reset_index(drop=True)
+        elif pilihan_urut == "Stok: Terbanyak ke Sedikit (Max -> 0)":
+            df_s_filtered = df_s_filtered.sort_values(by='stok', ascending=False).reset_index(drop=True)
+        else:
+            df_s_filtered = df_s_filtered.sort_values(by='nama_barang', key=lambda col: col.str.lower()).reset_index(drop=True)
 
         st.markdown("---")
         
