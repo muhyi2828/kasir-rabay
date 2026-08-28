@@ -407,6 +407,28 @@ with tab1:
         quick = st.text_input("INPUT KODE CEPAT/BARCODE", placeholder="Ketik kode cepat / barcode", label_visibility="collapsed", disabled=modal_belum_diisi)
         st.markdown('</div>', unsafe_allow_html=True)
         
+        # --- FITUR SARAN / PENCARIAN BARANG OTOMATIS ---
+        if quick and not modal_belum_diisi and len(data_s) > 0:
+            query_input = quick.upper().strip()
+            saran_barang = [
+                item for item in data_s 
+                if query_input in str(item.get('kode_cepat', '')).upper() 
+                or query_input in str(item.get('barcode', '')).upper()
+                or query_input in str(item.get('nama_barang', '')).upper()
+            ]
+            
+            if saran_barang:
+                st.caption(f"🔍 Ditemukan {len(saran_barang)} barang yang cocok:")
+                pilihan_saran = st.selectbox(
+                    "Pilih dari saran:",
+                    options=saran_barang,
+                    format_func=lambda x: f"{x.get('nama_barang')} | Kode: {x.get('kode_cepat')} | Harga: {f_uang(x.get('harga_jual'))} (Stok: {x.get('stok')})",
+                    key="select_saran_barang",
+                    label_visibility="collapsed"
+                )
+                if pilihan_saran:
+                    quick = pilihan_saran.get('kode_cepat', '')
+
         nama_brg_det = ""
         row_id_stok = None
         stok_sisa_brg = 0
