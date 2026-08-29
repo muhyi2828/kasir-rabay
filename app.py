@@ -989,8 +989,20 @@ with tab3:
         input_cash_baru = st.number_input("Setel Cash di Laci (Rp):", value=st.session_state['modal_cash'], step=50000)
         if input_cash_baru > 0: st.caption(f"👀 Terbaca: **{f_uang(input_cash_baru)}**")
             
-        input_digi_baru = st.number_input("Setel Saldo Digital (Rp):", value=st.session_state['modal_digi'], step=50000)
-        if input_digi_baru > 0: st.caption(f"👀 Terbaca: **{f_uang(input_digi_baru)}**")
+        # PISAH MENJADI SALDO BANK DAN SALDO E-WALLET
+        # (Untuk kemudahan mengingat, total keduanya otomatis masuk sebagai modal digital)
+        col_m1, col_m2 = st.columns(2)
+        with col_m1:
+            # Nilai awal e-wallet bisa diambil proporsional atau 0 jika baru diset
+            input_ewallet_baru = st.number_input("Setel Saldo E-Wallet (Rp):", value=0, step=50000)
+            if input_ewallet_baru > 0: st.caption(f"👀 {f_uang(input_ewallet_baru)}")
+        with col_m2:
+            input_bank_baru = st.number_input("Setel Saldo Bank (Rp):", value=int(st.session_state['modal_digi']), step=50000)
+            if input_bank_baru > 0: st.caption(f"👀 {f_uang(input_bank_baru)}")
+
+        total_digi_gabungan = input_ewallet_baru + input_bank_baru
+        if total_digi_gabungan > 0:
+            st.markdown(f"<p style='color:#14B8A6; font-size:16px; font-weight:bold;'>Total Saldo Digital Gabungan: {f_uang(total_digi_gabungan)}</p>", unsafe_allow_html=True)
             
         if st.button("💾 Simpan Modal Sesi", type="primary", use_container_width=True):
             waktu_sekarang = datetime.now(pytz.timezone('Asia/Jakarta')).strftime("%Y-%m-%d %H:%M:%S")
@@ -998,12 +1010,12 @@ with tab3:
                 supabase.table("kas").insert({
                     "waktu": waktu_sekarang,
                     "cash": int(input_cash_baru),
-                    "digital": int(input_digi_baru),
+                    "digital": int(total_digi_gabungan),
                     "cabang": cabang_aktif
                 }).execute()
 
                 st.session_state['modal_cash'] = int(input_cash_baru)
-                st.session_state['modal_digi'] = int(input_digi_baru)
+                st.session_state['modal_digi'] = int(total_digi_gabungan)
                 st.session_state['waktu_mulai_sesi'] = waktu_sekarang
                 st.cache_data.clear()
                 st.success("Modal awal sesi berhasil disimpan permanen ke database!")
@@ -1060,7 +1072,7 @@ with tab3:
 
     st.markdown(f"""
         <div class="metric-card-blue">
-            <h4 style="margin:0; color:#14B8A6;">💳 Saldo Digital (Sesi Aktif)</h4>
+            <h4 style="margin:0; color:#14B8A6;">💳 Saldo Digital Gabungan (Sesi Aktif)</h4>
             <p style="margin:5px 0 0 0; color:#ccc; font-size:14px;">TOTAL: {f_uang(total_digi_sistem)}</p>
         </div>
     """, unsafe_allow_html=True)
