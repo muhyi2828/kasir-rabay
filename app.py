@@ -515,9 +515,13 @@ with tab1:
                     if jenis_terpilih == "Penjualan Barang" and row_id_stok:
                         db_update("stok", row_id_stok, {"stok": max(0, stok_sisa_brg - 1)})
                     
+                    # SIMPAN NAMA BARANG/KETERANGAN
+                    ket_simpan = nama_brg_det if jenis_terpilih == "Penjualan Barang" else ""
+                    
                     sukses, err_msg = db_insert("transaksi", {
                         "waktu": waktu, "jenis": jenis_terpilih, "nominal": int(nominal_trx),
-                        "admin": int(admin), "total": int(total_uang), "profit": int(profit_bersih)
+                        "admin": int(admin), "total": int(total_uang), "profit": int(profit_bersih),
+                        "keterangan": ket_simpan
                     })
                     
                     st.session_state['is_submitting'] = False
@@ -579,6 +583,7 @@ with tab1:
                     qty = item['Qty']
                     r_stok = item['Row_Stok']
                     s_stk = item['Sisa_Stok']
+                    ket_item = item['Nama'] if item['Nama'] else ""
                     
                     if j_trx == "Penjualan Barang" and r_stok:
                         stok_baru = max(0, s_stk - qty)
@@ -592,7 +597,8 @@ with tab1:
                         
                         sukses_ins, err_ins = db_insert("transaksi", {
                             "waktu": waktu, "jenis": j_trx, "nominal": int(nom_trx),
-                            "admin": int(adm_trx), "total": int(tot_trx), "profit": int(prof_trx)
+                            "admin": int(adm_trx), "total": int(tot_trx), "profit": int(prof_trx),
+                            "keterangan": ket_item
                         })
                         if not sukses_ins: 
                             berhasil = False
@@ -688,7 +694,8 @@ with tab1:
                 Jangan sertakan tanda kutip markdown (seperti ```), jangan berikan teks pengantar, langsung tulis daftar itemnya baris per baris saja.
                 """
                 
-                res = client.models.generate_content(model='gemini-3.5-flash-lite', contents=[img_temp, prompt_text])
+                # Menggunakan model 1.5-flash yang lebih cepat dan stabil
+                res = client.models.generate_content(model='gemini-1.5-flash', contents=[img_temp, prompt_text])
                 lens_placeholder.empty()
 
                 raw_text = res.text.strip()
@@ -707,7 +714,9 @@ with tab1:
                         if len(parts) >= 3:
                             prov = parts[1]
                             try:
-                                nom_val = int(re.sub(r'[^0-9]', '', parts[2]))
+                                # PERBAIKAN DESIMAL
+                                nom_str = parts[2].split(',')[0]
+                                nom_val = int(re.sub(r'[^0-9]', '', nom_str))
                                 if nom_val < 1000: nom_val = nom_val * 1000
                                 
                                 matched_nama = None
@@ -751,7 +760,9 @@ with tab1:
                         if len(parts) >= 2:
                             keterangan = parts[0].strip()
                             try:
-                                nom_val = int(re.sub(r'[^0-9]', '', parts[1]))
+                                # PERBAIKAN DESIMAL
+                                nom_str = parts[1].split(',')[0]
+                                nom_val = int(re.sub(r'[^0-9]', '', nom_str))
                                 if nom_val > 0:
                                     if tanda == "-":
                                         default_jenis = "Bank"
@@ -791,6 +802,9 @@ with tab1:
                         item['Jenis Trx'] = pilihan_opsi_mutasi
                     else:
                         st.markdown(f"<span style='color:#14B8A6; font-weight:bold;'>Jenis Trx: Tarik Tunai (Otomatis)</span>", unsafe_allow_html=True)
+                    
+                    est_profit = hitung_admin(item['Nominal (Rp)'], item['Jenis Trx'])
+                    st.markdown(f"<span style='color:#2ca02c; font-size:14px;'>Estimasi Admin/Profit: {f_uang(est_profit)}</span>", unsafe_allow_html=True)
                 else:
                     st.markdown(f"<span style='color:#14B8A6; font-weight:bold;'>Jenis Trx: Penjualan Barang (Untung: {f_uang(item['Profit'])})</span>", unsafe_allow_html=True)
                 
@@ -818,6 +832,7 @@ with tab1:
                         prof = item['Profit']
                         tot = nom
                         admin_val = prof
+                        ket_item = item['Nama Barang']
                         if r_id:
                             for s_item in data_s:
                                 if s_item.get('id') == r_id:
@@ -831,10 +846,12 @@ with tab1:
                         else:
                             tot = nom + admin_val
                         prof = admin_val
+                        ket_item = item['Nama Barang']
 
                     sukses_ins, err_ins = db_insert("transaksi", {
                         "waktu": waktu, "jenis": j_trx, "nominal": int(nom),
-                        "admin": int(admin_val), "total": int(tot), "profit": int(prof)
+                        "admin": int(admin_val), "total": int(tot), "profit": int(prof),
+                        "keterangan": ket_item
                     })
                     if not sukses_ins: 
                         berhasil = False
@@ -916,12 +933,19 @@ with tab2:
                 nom_trx = f_uang(row['nominal'])
                 tot_trx = f_uang(row['total'])
                 
+                # Menampilkan Profit
+                profit_trx = f_uang(row.get('profit', 0))
+                
+                # Menampilkan Keterangan/Nama Barang
+                ket_val = row.get('keterangan', '')
+                ket_tampil = f" - <b>{ket_val}</b>" if pd.notna(ket_val) and str(ket_val).strip() else ""
+                
                 c_chk, c_info = st.columns([1, 9])
                 with c_chk:
                     is_checked = st.checkbox("Pilih", key=f"chk_trx_{r_id}", label_visibility="collapsed")
                     if is_checked: list_trx_terpilih.append(row)
                 with c_info:
-                    st.markdown(f"**{waktu_trx}** | <span style='color:#14B8A6;'>{jns_trx}</span><br>Nominal: {nom_trx} | Total: {tot_trx}", unsafe_allow_html=True)
+                    st.markdown(f"**{waktu_trx}** | <span style='color:#14B8A6;'>{jns_trx}</span><span style='color:#ccc;'>{ket_tampil}</span><br>Nominal: {nom_trx} | Total: {tot_trx} | <b style='color:#2ca02c;'>Profit: {profit_trx}</b>", unsafe_allow_html=True)
                 
                 if st.button("✏️ Edit Transaksi", key=f"edit_trx_{r_id}", use_container_width=True):
                     st.session_state[f"mode_edit_trx_{r_id}"] = True
@@ -931,6 +955,7 @@ with tab2:
                         st.write(f"Edit Transaksi ID: {r_id}")
                         e_waktu = st.text_input("Waktu", value=row['waktu'])
                         e_jenis = st.text_input("Jenis", value=row['jenis'])
+                        e_ket = st.text_input("Keterangan/Produk", value=row.get('keterangan', ''))
                         e_nom = st.number_input("Nominal", value=int(row['nominal']), step=1000)
                         e_adm = st.number_input("Admin", value=int(row['admin']), step=1000)
                         e_tot = st.number_input("Total", value=int(row['total']), step=1000)
@@ -939,7 +964,8 @@ with tab2:
                         if st.form_submit_button("Simpan Perubahan"):
                             sukses_up, _ = db_update("transaksi", r_id, {
                                 "waktu": e_waktu, "jenis": e_jenis, "nominal": int(e_nom),
-                                "admin": int(e_adm), "total": int(e_tot), "profit": int(e_prof)
+                                "admin": int(e_adm), "total": int(e_tot), "profit": int(e_prof),
+                                "keterangan": e_ket
                             })
                             if sukses_up:
                                 st.session_state[f"mode_edit_trx_{r_id}"] = False
@@ -954,17 +980,22 @@ with tab2:
             if list_trx_terpilih:
                 st.markdown("<br>", unsafe_allow_html=True)
                 if st.button(f"🗑️ HAPUS {len(list_trx_terpilih)} TRANSAKSI TERPILIH", type="primary", use_container_width=True):
+                    fresh_stok_res = supabase.table("stok").select("*").eq("cabang", cabang_aktif).execute()
+                    fresh_stok = fresh_stok_res.data if fresh_stok_res and fresh_stok_res.data else []
+
                     for sel_row in list_trx_terpilih:
                         trx_id = sel_row['id']
                         trx_jenis = sel_row['jenis']
                         trx_nominal = int(sel_row['nominal'])
                         
-                        if trx_jenis == "Penjualan Barang" and data_s:
-                            for stok_item in data_s:
+                        # Pengembalian stok saat trx dihapus
+                        if trx_jenis == "Penjualan Barang" and fresh_stok:
+                            for stok_item in fresh_stok:
                                 if int(stok_item.get('harga_jual', 0)) == trx_nominal:
                                     s_id = stok_item.get('id')
                                     s_stok_lama = int(stok_item.get('stok', 0))
                                     db_update("stok", s_id, {"stok": s_stok_lama + 1})
+                                    stok_item['stok'] = s_stok_lama + 1
                                     break
                         
                         db_delete("transaksi", trx_id)
