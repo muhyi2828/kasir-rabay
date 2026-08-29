@@ -174,7 +174,7 @@ with st.spinner("⏳ Sinkronisasi Database Supabase..."):
     data_gaji = fetch_table_data("gaji_karyawan", cabang_aktif)
     
     try:
-        res_cat = supabase.table("catatan_harian").select("*").eq("cabang", cabang_aktif).execute()
+        res_cat = supabase.table("catatan_harian").select("*").eq("cabang", cabang_aktif).order("waktu", desc=True).execute()
         data_catatan = res_cat.data if res_cat.data else []
     except:
         data_catatan = []
@@ -989,11 +989,8 @@ with tab3:
         input_cash_baru = st.number_input("Setel Cash di Laci (Rp):", value=st.session_state['modal_cash'], step=50000)
         if input_cash_baru > 0: st.caption(f"👀 Terbaca: **{f_uang(input_cash_baru)}**")
             
-        # PISAH MENJADI SALDO BANK DAN SALDO E-WALLET
-        # (Untuk kemudahan mengingat, total keduanya otomatis masuk sebagai modal digital)
         col_m1, col_m2 = st.columns(2)
         with col_m1:
-            # Nilai awal e-wallet bisa diambil proporsional atau 0 jika baru diset
             input_ewallet_baru = st.number_input("Setel Saldo E-Wallet (Rp):", value=0, step=50000)
             if input_ewallet_baru > 0: st.caption(f"👀 {f_uang(input_ewallet_baru)}")
         with col_m2:
@@ -1086,50 +1083,46 @@ with tab3:
         </div>
     """, unsafe_allow_html=True)
 
-    # --- HALAMAN CATATAN HARIAN (MENGGUNAKAN UPSERT SUPABASE) ---
+    # --- CATATAN HARIAN YANG AMAN DARI PENGHAPUSAN ---
     st.markdown("---")
     st.markdown("### 📝 Catatan / Catatan Penting Sesi Ini")
     
-    catatan_terkini_text = ""
+    with st.form("form_tambah_catatan_baru"):
+        input_catatan_baru = st.text_area("Tulis catatan atau pengingat baru di sini:", placeholder="Tulis catatan harian, hutang pelanggan, dll...")
+        if st.form_submit_button("💾 Tambah Catatan Baru"):
+            if input_catatan_baru.strip():
+                waktu_buat = datetime.now(pytz.timezone('Asia/Jakarta')).strftime("%Y-%m-%d %H:%M:%S")
+                db_insert("catatan_harian", {
+                    "waktu": waktu_buat,
+                    "cabang": cabang_aktif,
+                    "isi_catatan": input_catatan_baru.strip()
+                })
+                st.success("Catatan berhasil ditambahkan!")
+                time.sleep(0.5)
+                st.rerun()
+            else:
+                st.error("Catatan tidak boleh kosong!")
+
+    st.markdown("#### 📋 Daftar Catatan Aktif")
     if data_catatan and len(data_catatan) > 0:
-        catatan_terkini_text = data_catatan[0].get("isi_catatan", "")
-
-    input_catatan_user = st.text_area(
-        "Tulis catatan atau pengingat di sini:", 
-        value=catatan_terkini_text, 
-        height=120, 
-        placeholder="Tulis catatan harian, hutang pelanggan, atau hal penting lainnya di sini...",
-        key="txt_area_catatan_upsert"
-    )
-
-    col_btn_ct1, col_btn_ct2 = st.columns(2)
-    with col_btn_ct1:
-        if st.button("💾 Simpan Catatan", type="primary", use_container_width=True):
-            try:
-                supabase.table("catatan_harian").upsert({
-                    "cabang": cabang_aktif,
-                    "isi_catatan": input_catatan_user
-                }, on_conflict="cabang").execute()
-                
-                st.success("Catatan berhasil disimpan ke database!")
-                time.sleep(0.5)
-                st.rerun()
-            except Exception as e:
-                st.error(f"Gagal menyimpan catatan: {e}")
-                
-    with col_btn_ct2:
-        if st.button("🗑️ Hapus Catatan", use_container_width=True):
-            try:
-                supabase.table("catatan_harian").upsert({
-                    "cabang": cabang_aktif,
-                    "isi_catatan": ""
-                }, on_conflict="cabang").execute()
-                
-                st.success("Catatan berhasil dihapus dari database!")
-                time.sleep(0.5)
-                st.rerun()
-            except Exception as e:
-                st.error(f"Gagal menghapus catatan: {e}")
+        for cat_row in data_catatan:
+            c_id = cat_row.get('id')
+            c_waktu = cat_row.get('waktu', '')
+            c_isi = cat_row.get('isi_catatan', '')
+            
+            c_box1, c_box2 = st.columns([8, 2])
+            with c_box1:
+                st.markdown(f"**🕒 {c_waktu}**<br>{c_isi}", unsafe_allow_html=True)
+            with c_box2:
+                if st.button("🗑️ Hapus", key=f"del_cat_{c_id}", use_container_width=True):
+                    db_delete("catatan_harian", c_id)
+                    st.cache_data.clear()
+                    st.success("Catatan dihapus!")
+                    time.sleep(0.5)
+                    st.rerun()
+            st.markdown("<hr style='margin:5px 0; border-color:#333;'>", unsafe_allow_html=True)
+    else:
+        st.info("Belum ada catatan tersimpan.")
 
     st.markdown("---")
     st.markdown("### 📜 Riwayat Sesi Kerja Sebelumnya")
