@@ -578,13 +578,25 @@ with tab1:
             
             c_k1, c_k2 = st.columns(2)
             if c_k1.button("🚀 PROSES SEMUA", type="primary", use_container_width=True, disabled=st.session_state['is_submitting'] or modal_belum_diisi):
-                stok_cukup = True
+                # Validasi kumulatif stok pada keranjang
+                permintaan_keranjang = {}
                 for item in st.session_state['keranjang_belanja']:
                     if item['Jenis'] == "Penjualan Barang" and item['Row_Stok']:
-                        if item['Qty'] > item['Sisa_Stok']:
-                            stok_cukup = False
-                            st.error(f"❌ Stok tidak cukup untuk barang: **{item['Nama']}** (Sisa: {item['Sisa_Stok']}, Diminta: {item['Qty']})")
+                        r_id = item['Row_Stok']
+                        permintaan_keranjang[r_id] = permintaan_keranjang.get(r_id, 0) + item['Qty']
+
+                stok_cukup = True
+                for r_id, total_minta in permintaan_keranjang.items():
+                    for s_item in data_s:
+                        if s_item.get('id') == r_id:
+                            current_stk = int(s_item.get('stok', 0))
+                            nama_brg_db = s_item.get('nama_barang', 'Barang')
+                            if total_minta > current_stk:
+                                stok_cukup = False
+                                st.error(f"❌ Stok tidak cukup untuk barang: **{nama_brg_db}** (Sisa stok: {current_stk}, Total diminta di keranjang: {total_minta})")
                             break
+                    if not stok_cukup:
+                        break
                 
                 if stok_cukup:
                     st.session_state['is_submitting'] = True
@@ -596,12 +608,16 @@ with tab1:
                         j_trx = item['Jenis']
                         qty = item['Qty']
                         r_stok = item['Row_Stok']
-                        s_stk = item['Sisa_Stok']
                         ket_item = item['Nama'] if item['Nama'] else ""
                         
                         if j_trx == "Penjualan Barang" and r_stok:
-                            stok_baru = max(0, s_stk - qty)
-                            db_update("stok", r_stok, {"stok": stok_baru})
+                            for s_item in data_s:
+                                if s_item.get('id') == r_stok:
+                                    current_stk = int(s_item.get('stok', 0))
+                                    stok_baru = max(0, current_stk - qty)
+                                    db_update("stok", r_stok, {"stok": stok_baru})
+                                    s_item['stok'] = stok_baru
+                                    break
                         
                         for _ in range(qty):
                             nom_trx = item['Nominal Satuan']
@@ -697,7 +713,7 @@ with tab1:
                 
                 Tugas Anda:
                 - Jika JENIS A, ekstrak setiap item menjadi baris dengan format: VOUCHER [PROVIDER] [NOMINAL_ANGKA]
-                - Jika JENIS B, ekstrak setiap transaksi dengan format: MUTASI [TANDA (+ or -)] [KETERANGAN/NAMA] [NOMINAL_ANGKA]
+                - Jika JENIS B, ekstrak setiap transaksi dengan format: MUTASI [TANDA (+ atau -)] [KETERANGAN/NAMA] [NOMINAL_ANGKA]
                 
                 Contoh format balasan:
                 VOUCHER AXIS 13000
@@ -829,16 +845,23 @@ with tab1:
 
             st.markdown('<div class="floating-container">', unsafe_allow_html=True)
             if st.button("💾 SIMPAN SEMUA TRANSAKSI DRAF", type="primary", use_container_width=True, disabled=st.session_state['is_submitting'] or modal_belum_diisi):
-                stok_draf_cukup = True
+                # Validasi kumulatif stok pada draf OCR
+                permintaan_barang = {}
                 for item in st.session_state['draf_scan_smart']:
                     if item['Tipe'] == 'Voucher' and item['Row_Stok']:
-                        for s_item in data_s:
-                            if s_item.get('id') == item['Row_Stok']:
-                                current_stk = int(s_item.get('stok', 0))
-                                if current_stk <= 0:
-                                    stok_draf_cukup = False
-                                    st.error(f"❌ Gagal! Stok barang '**{item['Nama Barang']}**' dari hasil scan sudah habis (0).")
-                                break
+                        r_id = item['Row_Stok']
+                        permintaan_barang[r_id] = permintaan_barang.get(r_id, 0) + 1
+
+                stok_draf_cukup = True
+                for r_id, total_minta in permintaan_barang.items():
+                    for s_item in data_s:
+                        if s_item.get('id') == r_id:
+                            current_stk = int(s_item.get('stok', 0))
+                            nama_brg_db = s_item.get('nama_barang', 'Barang')
+                            if total_minta > current_stk:
+                                stok_draf_cukup = False
+                                st.error(f"❌ Gagal! Stok **'{nama_brg_db}'** tidak cukup. Sisa stok: {current_stk}, diminta pada draf: {total_minta} item.")
+                            break
                 
                 if stok_draf_cukup:
                     st.session_state['is_submitting'] = True
@@ -861,6 +884,7 @@ with tab1:
                                     if s_item.get('id') == r_id:
                                         current_stk = int(s_item.get('stok', 0))
                                         db_update("stok", r_id, {"stok": max(0, current_stk - 1)})
+                                        s_item['stok'] = max(0, current_stk - 1)
                                         break
                         else:
                             admin_val = hitung_admin(nom, j_trx)
@@ -1521,7 +1545,7 @@ with tab5:
                 time.sleep(0.5)
                 st.rerun()
             else:
-                st.error("Silakan isi salah satu nominal gaji atau bonus terlebih dahulu!")
+                st.error("Silakan isi minimal salah satu nominal gaji atau bonus!")
 
     st.markdown("---")
     st.markdown("### 📋 Tabel Gaji Berjalan (Aktif)")
