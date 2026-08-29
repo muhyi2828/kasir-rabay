@@ -695,7 +695,7 @@ with tab1:
                 """
                 
                 # Menggunakan model gemini-2.5-flash sesuai permintaan
-                res = client.models.generate_content(model='gemini-2.5-flash', contents=[img_temp, prompt_text])
+                res = client.models.generate_content(model='gemini-2.0-flash', contents=[img_temp, prompt_text])
                 lens_placeholder.empty()
 
                 raw_text = res.text.strip()
