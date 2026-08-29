@@ -685,18 +685,23 @@ with tab1:
                 MUTASI - NURYANIH 9067000
                 MUTASI + QRIS TIZC 75000
                 
-                Jangan tambahkan teks pengantar apa pun, langsung daftar itemnya baris per baris.
+                Jangan sertakan tanda kutip markdown (seperti ```), jangan berikan teks pengantar, langsung tulis daftar itemnya baris per baris saja.
                 """
                 
                 res = client.models.generate_content(model='gemini-3.5-flash-lite', contents=[img_temp, prompt_text])
                 lens_placeholder.empty()
 
                 raw_text = res.text.strip()
+                raw_text = re.sub(r'```[a-zA-Z]*', '', raw_text)
+                raw_text = raw_text.replace('```', '').strip()
+                
                 lines = raw_text.split('\n')
                 processed_data = []
                 
                 for line in lines:
                     line = line.strip()
+                    if not line: continue
+                    
                     if line.startswith("VOUCHER"):
                         parts = line.split()
                         if len(parts) >= 3:
@@ -749,9 +754,9 @@ with tab1:
                                 nom_val = int(re.sub(r'[^0-9]', '', parts[1]))
                                 if nom_val > 0:
                                     if tanda == "-":
-                                        default_jenis = "Bank"  # Min (-): Default Bank, bisa diubah ke E-Wallet
+                                        default_jenis = "Bank"
                                     else:
-                                        default_jenis = "Tarik Tunai"  # Plus/Tanpa tanda: Fix Tarik Tunai
+                                        default_jenis = "Tarik Tunai"
                                         
                                     processed_data.append({
                                         'Tipe': 'Mutasi',
