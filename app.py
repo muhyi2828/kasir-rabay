@@ -612,10 +612,10 @@ with tab1:
                 st.rerun()
 
     else: 
-        st.info("💡 **Tips AI Scan Catatan Voucher:** Upload foto catatan tulisan tangan karyawan Anda (contoh: `AXIS:13+13+14+...`). AI akan otomatis membaca jenis voucher, nominal, dan menjumlahkan seluruh item terjual!")
+        st.info("💡 **Tips AI Scan Multifungsi:** Upload foto catatan voucher fisik (misal `AXIS:13+13`) atau screenshot mutasi bank/e-wallet. AI akan otomatis mendeteksi jenis gambar dan memprosesnya ke draf!")
         sumber_gambar = st.file_uploader("Upload Foto Catatan / Mutasi:", type=["jpg", "jpeg", "png"], disabled=modal_belum_diisi)
 
-        if sumber_gambar and st.button("🔍 AI SCAN CATATAN VOUCHER", use_container_width=True, type="primary", disabled=modal_belum_diisi):
+        if sumber_gambar and st.button("🔍 AI SCAN MULTIFUNGSI", use_container_width=True, type="primary", disabled=modal_belum_diisi):
             try:
                 st.session_state['gambar_scan_terakhir'] = sumber_gambar
 
@@ -665,21 +665,27 @@ with tab1:
                         <div class="scan-beam"></div>
                         <img src="data:image/jpeg;base64,{img_str}" class="lens-img">
                     </div>
-                    <p style="text-align:center; color:#14B8A6; font-weight:bold; font-size:15px;">🔍 Sedang Memindai Catatan Voucher...</p>
+                    <p style="text-align:center; color:#14B8A6; font-weight:bold; font-size:15px;">🔍 AI Sedang Memindai Gambar...</p>
                 """, unsafe_allow_html=True)
 
                 client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
                 
                 prompt_text = """
-                Analisis gambar catatan penjualan voucher fisik ini. Catatan berbentuk nama provider diikuti titik dua atau teks, lalu deretan angka nominal yang dipisah tanda tambah (+) seperti 'AXIS:13+13+13+14' atau 'TSEL:10+10+11'. 
-                Angka-angka tersebut merepresentasikan harga jual voucher dalam ribuan rupiah (contoh: angka 13 artinya 13000, 10 artinya 10000, 16 artinya 16000).
-                Tugas Anda: ekstrak setiap item penjualan voucher tersebut secara rinci.
-                Balas STRICTLY dalam format teks baris per baris dengan format: [PROVIDER] [NOMINAL_PENUH], contoh:
-                AXIS 13000
-                AXIS 13000
-                AXIS 14000
-                TSEL 10000
-                Jangan tambahkan teks pengantar apa pun, langsung daftar itemnya.
+                Analisis gambar yang diunggah ini. Gambar bisa berupa dua jenis:
+                JENIS A (Catatan Voucher Fisik): Tulisan tangan berisi nama provider dan deretan angka harga jual dipisah tanda tambah (+) seperti 'AXIS:13+13+14'.
+                JENIS B (Mutasi Bank / E-Wallet): Tangkapan layar daftar transaksi keuangan yang memiliki tanda minus (-) untuk uang keluar atau tanda plus (+) / tanpa tanda untuk uang masuk.
+                
+                Tugas Anda:
+                - Jika JENIS A, ekstrak setiap item menjadi baris dengan format: VOUCHER [PROVIDER] [NOMINAL_ANGKA]
+                - Jika JENIS B, ekstrak setiap transaksi dengan format: MUTASI [TANDA (+ atau -)] [KETERANGAN/NAMA] [NOMINAL_ANGKA]
+                
+                Contoh format balasan:
+                VOUCHER AXIS 13000
+                VOUCHER TSEL 10000
+                MUTASI - NURYANIH 9067000
+                MUTASI + QRIS TIZC 75000
+                
+                Jangan tambahkan teks pengantar apa pun, langsung daftar itemnya baris per baris.
                 """
                 
                 res = client.models.generate_content(model='gemini-3.5-flash-lite', contents=[img_temp, prompt_text])
@@ -689,16 +695,15 @@ with tab1:
                 lines = raw_text.split('\n')
                 processed_data = []
                 
-                for idx, line in enumerate(lines):
+                for line in lines:
                     line = line.strip()
-                    if line:
+                    if line.startswith("VOUCHER"):
                         parts = line.split()
-                        if len(parts) >= 2:
-                            prov = parts[0]
+                        if len(parts) >= 3:
+                            prov = parts[1]
                             try:
-                                nom_val = int(re.sub(r'[^0-9]', '', parts[1]))
-                                if nom_val < 1000:
-                                    nom_val = nom_val * 1000
+                                nom_val = int(re.sub(r'[^0-9]', '', parts[2]))
+                                if nom_val < 1000: nom_val = nom_val * 1000
                                 
                                 matched_nama = None
                                 matched_row_id = None
@@ -716,33 +721,76 @@ with tab1:
                                 
                                 if matched_row_id is not None:
                                     processed_data.append({
+                                        'Tipe': 'Voucher',
                                         'Nama Barang': matched_nama,
                                         'Nominal (Rp)': nom_val,
                                         'Profit': matched_profit,
-                                        'Row_Stok': matched_row_id
+                                        'Row_Stok': matched_row_id,
+                                        'Jenis Trx': 'Penjualan Barang'
                                     })
-                            except:
-                                pass
+                            except: pass
+                            
+                    elif line.startswith("MUTASI"):
+                        clean_line = line.replace("MUTASI", "").strip()
+                        if clean_line.startswith("-"):
+                            tanda = "-"
+                            rest = clean_line[1:].strip()
+                        elif clean_line.startswith("+"):
+                            tanda = "+"
+                            rest = clean_line[1:].strip()
+                        else:
+                            tanda = "+"
+                            rest = clean_line
+                            
+                        parts = rest.rsplit(' ', 1)
+                        if len(parts) >= 2:
+                            keterangan = parts[0].strip()
+                            try:
+                                nom_val = int(re.sub(r'[^0-9]', '', parts[1]))
+                                if nom_val > 0:
+                                    if tanda == "-":
+                                        default_jenis = "Bank"  # Min (-): Default Bank, bisa diubah ke E-Wallet
+                                    else:
+                                        default_jenis = "Tarik Tunai"  # Plus/Tanpa tanda: Fix Tarik Tunai
+                                        
+                                    processed_data.append({
+                                        'Tipe': 'Mutasi',
+                                        'Nama Barang': keterangan,
+                                        'Nominal (Rp)': nom_val,
+                                        'Profit': 0,
+                                        'Row_Stok': None,
+                                        'Jenis Trx': default_jenis
+                                    })
+                            except: pass
 
                 st.session_state['draf_scan_smart'] = processed_data
                 st.rerun()
-            except Exception as e: st.error(f"Gagal scan catatan: {e}")
+            except Exception as e: st.error(f"Gagal scan gambar: {e}")
 
         if st.session_state.get('gambar_scan_terakhir') is not None:
             st.markdown("---")
-            st.write("📷 **Foto Catatan Asli (Untuk Sinkronisasi):**")
+            st.write("📷 **Foto Asli (Untuk Sinkronisasi):**")
             st.image(st.session_state['gambar_scan_terakhir'], use_container_width=True)
 
         if st.session_state['draf_scan_smart']:
             st.markdown("---")
-            st.info(f"✨ Berhasil membaca {len(st.session_state['draf_scan_smart'])} item penjualan voucher yang valid di database.")
+            st.info(f"✨ Berhasil memindai {len(st.session_state['draf_scan_smart'])} item transaksi.")
             
             indices_to_delete = []
             for i, item in enumerate(st.session_state['draf_scan_smart']):
-                col_h1, col_h2 = st.columns([6, 1])
-                with col_h1: st.markdown(f"**Item #{i+1}: {item['Nama Barang']}** - Harga: {f_uang(item['Nominal (Rp)'])} (Untung: {f_uang(item['Profit'])})")
-                with col_h2:
-                    if st.button("❌", key=f"del_ocr_vouc_{i}", help="Hapus item"): indices_to_delete.append(i)
+                st.markdown(f"**Item #{i+1} [{item['Tipe']}]**: {item['Nama Barang']} - Nominal: {f_uang(item['Nominal (Rp)'])}")
+                
+                if item['Tipe'] == 'Mutasi':
+                    if item['Jenis Trx'] in ["Bank", "E-Wallet"]:
+                        pilihan_opsi_mutasi = st.selectbox("Pilih Jenis Trx:", options=["Bank", "E-Wallet"], index=0 if item['Jenis Trx']=="Bank" else 1, key=f"sel_mut_jenis_{i}")
+                        item['Jenis Trx'] = pilihan_opsi_mutasi
+                    else:
+                        st.markdown(f"<span style='color:#14B8A6; font-weight:bold;'>Jenis Trx: Tarik Tunai (Otomatis)</span>", unsafe_allow_html=True)
+                else:
+                    st.markdown(f"<span style='color:#14B8A6; font-weight:bold;'>Jenis Trx: Penjualan Barang (Untung: {f_uang(item['Profit'])})</span>", unsafe_allow_html=True)
+                
+                if st.button("❌ Hapus Item Ini", key=f"del_ocr_item_{i}"):
+                    indices_to_delete.append(i)
                 st.markdown("<hr style='margin:5px 0; border-color:#333;'>", unsafe_allow_html=True)
             
             if indices_to_delete:
@@ -750,7 +798,7 @@ with tab1:
                 st.rerun()
 
             st.markdown('<div class="floating-container">', unsafe_allow_html=True)
-            if st.button("💾 SIMPAN SEMUA PENJUALAN VOUCHER", type="primary", use_container_width=True, disabled=st.session_state['is_submitting'] or modal_belum_diisi):
+            if st.button("💾 SIMPAN SEMUA TRANSAKSI DRAF", type="primary", use_container_width=True, disabled=st.session_state['is_submitting'] or modal_belum_diisi):
                 st.session_state['is_submitting'] = True
                 waktu = datetime.now(pytz.timezone('Asia/Jakarta')).strftime("%Y-%m-%d %H:%M:%S")
                 berhasil = True
@@ -758,19 +806,30 @@ with tab1:
                 
                 for item in st.session_state['draf_scan_smart']:
                     nom = item['Nominal (Rp)']
-                    prof = item['Profit']
+                    j_trx = item['Jenis Trx']
                     r_id = item['Row_Stok']
                     
-                    if r_id:
-                        for s_item in data_s:
-                            if s_item.get('id') == r_id:
-                                current_stk = int(s_item.get('stok', 0))
-                                db_update("stok", r_id, {"stok": max(0, current_stk - 1)})
-                                break
+                    if item['Tipe'] == 'Voucher':
+                        prof = item['Profit']
+                        tot = nom
+                        admin_val = prof
+                        if r_id:
+                            for s_item in data_s:
+                                if s_item.get('id') == r_id:
+                                    current_stk = int(s_item.get('stok', 0))
+                                    db_update("stok", r_id, {"stok": max(0, current_stk - 1)})
+                                    break
+                    else:
+                        admin_val = hitung_admin(nom, j_trx)
+                        if j_trx == "Tarik Tunai":
+                            tot = nom - admin_val
+                        else:
+                            tot = nom + admin_val
+                        prof = admin_val
 
                     sukses_ins, err_ins = db_insert("transaksi", {
-                        "waktu": waktu, "jenis": "Penjualan Barang", "nominal": int(nom),
-                        "admin": int(prof), "total": int(nom), "profit": int(prof)
+                        "waktu": waktu, "jenis": j_trx, "nominal": int(nom),
+                        "admin": int(admin_val), "total": int(tot), "profit": int(prof)
                     })
                     if not sukses_ins: 
                         berhasil = False
@@ -781,14 +840,14 @@ with tab1:
                     st.session_state['draf_scan_smart'] = []
                     st.session_state['gambar_scan_terakhir'] = None
                     st.cache_data.clear()
-                    st.success("Semua penjualan voucher berhasil dicatat & stok dikurangi!")
+                    st.success("Semua transaksi berhasil disimpan & dihitung otomatis!")
                     time.sleep(0.5)
                     st.rerun()
                 else: st.error(f"Sebagian data gagal disimpan! Error: {err_terakhir}")
             st.markdown('</div>', unsafe_allow_html=True)
         else:
             if sumber_gambar:
-                st.warning("⚠️ Catatan terbaca, tetapi tidak ada item yang cocok dengan data stok Anda. Pastikan nama provider dan harga jual voucher sudah terdaftar di menu **Stok Barang**.")
+                st.warning("⚠️ Gambar terbaca, namun tidak ada item valid yang berhasil diekstrak. Pastikan foto catatan atau mutasi Anda terlihat jelas.")
 
 # --- TAB 2: RIWAYAT ---
 with tab2:
