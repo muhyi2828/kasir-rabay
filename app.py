@@ -694,8 +694,8 @@ with tab1:
                 Jangan sertakan tanda kutip markdown (seperti ```), jangan berikan teks pengantar, langsung tulis daftar itemnya baris per baris saja.
                 """
                 
-                # Menggunakan model gemini-2.5-flash sesuai permintaan
-                res = client.models.generate_content(model='gemini-3.6-flash', contents=[img_temp, prompt_text])
+                # Model gemini-3.5-flash-lite
+                res = client.models.generate_content(model='gemini-3.5-flash-lite', contents=[img_temp, prompt_text])
                 lens_placeholder.empty()
 
                 raw_text = res.text.strip()
@@ -989,18 +989,16 @@ with tab2:
                         trx_nominal = int(sel_row['nominal'])
                         
                         # Pengembalian stok saat trx dihapus berdasarkan nama/keterangan produk
-if trx_jenis == "Penjualan Barang" and fresh_stok:
-    trx_ket = str(sel_row.get('keterangan', '')).strip().upper()
-    for stok_item in fresh_stok:
-        nama_stok_db = str(stok_item.get('nama_barang', '')).strip().upper()
-        # Cocokan berdasarkan nama barang atau harga jual jika keterangan kosong
-        if (trx_ket and trx_ket == nama_stok_db) or (not trx_ket and int(stok_item.get('harga_jual', 0)) == trx_nominal):
-            s_id = stok_item.get('id')
-            s_stok_lama = int(stok_item.get('stok', 0))
-            db_update("stok", s_id, {"stok": s_stok_lama + 1})
-            stok_item['stok'] = s_stok_lama + 1
-            break
-
+                        if trx_jenis == "Penjualan Barang" and fresh_stok:
+                            trx_ket = str(sel_row.get('keterangan', '')).strip().upper()
+                            for stok_item in fresh_stok:
+                                nama_stok_db = str(stok_item.get('nama_barang', '')).strip().upper()
+                                if (trx_ket and trx_ket == nama_stok_db) or (not trx_ket and int(stok_item.get('harga_jual', 0)) == trx_nominal):
+                                    s_id = stok_item.get('id')
+                                    s_stok_lama = int(stok_item.get('stok', 0))
+                                    db_update("stok", s_id, {"stok": s_stok_lama + 1})
+                                    stok_item['stok'] = s_stok_lama + 1
+                                    break
                         
                         db_delete("transaksi", trx_id)
                         
