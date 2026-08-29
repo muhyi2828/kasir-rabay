@@ -509,39 +509,44 @@ with tab1:
             col_b1, col_b2 = st.columns(2)
             with col_b1:
                 if st.button("💾 SIMPAN LANGSUNG", type="primary", use_container_width=True, disabled=st.session_state['is_submitting'] or modal_belum_diisi):
-                    st.session_state['is_submitting'] = True
-                    waktu = datetime.now(pytz.timezone('Asia/Jakarta')).strftime("%Y-%m-%d %H:%M:%S")
-                    
-                    if jenis_terpilih == "Penjualan Barang" and row_id_stok:
-                        db_update("stok", row_id_stok, {"stok": max(0, stok_sisa_brg - 1)})
-                    
-                    # SIMPAN NAMA BARANG/KETERANGAN
-                    ket_simpan = nama_brg_det if jenis_terpilih == "Penjualan Barang" else ""
-                    
-                    sukses, err_msg = db_insert("transaksi", {
-                        "waktu": waktu, "jenis": jenis_terpilih, "nominal": int(nominal_trx),
-                        "admin": int(admin), "total": int(total_uang), "profit": int(profit_bersih),
-                        "keterangan": ket_simpan
-                    })
-                    
-                    st.session_state['is_submitting'] = False
-                    if sukses:
-                        st.cache_data.clear()
-                        st.success("Tersimpan!")
-                        time.sleep(0.5)
-                        st.rerun()
+                    if jenis_terpilih == "Penjualan Barang" and row_id_stok and stok_sisa_brg <= 0:
+                        st.error("❌ Gagal! Stok barang ini sudah habis (0) dan tidak bisa dijual.")
                     else:
-                        st.error(f"Gagal simpan! Error: {err_msg}")
+                        st.session_state['is_submitting'] = True
+                        waktu = datetime.now(pytz.timezone('Asia/Jakarta')).strftime("%Y-%m-%d %H:%M:%S")
+                        
+                        if jenis_terpilih == "Penjualan Barang" and row_id_stok:
+                            db_update("stok", row_id_stok, {"stok": max(0, stok_sisa_brg - 1)})
+                        
+                        ket_simpan = nama_brg_det if jenis_terpilih == "Penjualan Barang" else ""
+                        
+                        sukses, err_msg = db_insert("transaksi", {
+                            "waktu": waktu, "jenis": jenis_terpilih, "nominal": int(nominal_trx),
+                            "admin": int(admin), "total": int(total_uang), "profit": int(profit_bersih),
+                            "keterangan": ket_simpan
+                        })
+                        
+                        st.session_state['is_submitting'] = False
+                        if sukses:
+                            st.cache_data.clear()
+                            st.success("Tersimpan!")
+                            time.sleep(0.5)
+                            st.rerun()
+                        else:
+                            st.error(f"Gagal simpan! Error: {err_msg}")
 
             with col_b2:
                 if st.button("🛒 MASUK KERANJANG", use_container_width=True, disabled=modal_belum_diisi):
-                    st.session_state['keranjang_belanja'].append({
-                        'Jenis': jenis_terpilih, 'Nama': nama_brg_det if nama_brg_det else jenis_terpilih,
-                        'Nominal Satuan': int(nominal_trx), 'Admin/Profit Satuan': int(profit_bersih), 
-                        'Qty': 1, 'Row_Stok': row_id_stok, 'Sisa_Stok': stok_sisa_brg
-                    })
-                    st.success("Masuk keranjang!")
-                    st.rerun()
+                    if jenis_terpilih == "Penjualan Barang" and row_id_stok and stok_sisa_brg <= 0:
+                        st.error("❌ Gagal! Stok barang ini sudah habis (0).")
+                    else:
+                        st.session_state['keranjang_belanja'].append({
+                            'Jenis': jenis_terpilih, 'Nama': nama_brg_det if nama_brg_det else jenis_terpilih,
+                            'Nominal Satuan': int(nominal_trx), 'Admin/Profit Satuan': int(profit_bersih), 
+                            'Qty': 1, 'Row_Stok': row_id_stok, 'Sisa_Stok': stok_sisa_brg
+                        })
+                        st.success("Masuk keranjang!")
+                        st.rerun()
             st.markdown('</div>', unsafe_allow_html=True)
 
         if st.session_state['keranjang_belanja']:
@@ -573,45 +578,54 @@ with tab1:
             
             c_k1, c_k2 = st.columns(2)
             if c_k1.button("🚀 PROSES SEMUA", type="primary", use_container_width=True, disabled=st.session_state['is_submitting'] or modal_belum_diisi):
-                st.session_state['is_submitting'] = True
-                waktu = datetime.now(pytz.timezone('Asia/Jakarta')).strftime("%Y-%m-%d %H:%M:%S")
-                berhasil = True
-                err_terakhir = ""
-                
+                stok_cukup = True
                 for item in st.session_state['keranjang_belanja']:
-                    j_trx = item['Jenis']
-                    qty = item['Qty']
-                    r_stok = item['Row_Stok']
-                    s_stk = item['Sisa_Stok']
-                    ket_item = item['Nama'] if item['Nama'] else ""
-                    
-                    if j_trx == "Penjualan Barang" and r_stok:
-                        stok_baru = max(0, s_stk - qty)
-                        db_update("stok", r_stok, {"stok": stok_baru})
-                    
-                    for _ in range(qty):
-                        nom_trx = item['Nominal Satuan']
-                        adm_trx = item['Admin/Profit Satuan']
-                        tot_trx = nom_trx + adm_trx if j_trx == "Transaksi Lainnya" else (nom_trx - adm_trx if j_trx == "Tarik Tunai" else nom_trx)
-                        prof_trx = adm_trx
-                        
-                        sukses_ins, err_ins = db_insert("transaksi", {
-                            "waktu": waktu, "jenis": j_trx, "nominal": int(nom_trx),
-                            "admin": int(adm_trx), "total": int(tot_trx), "profit": int(prof_trx),
-                            "keterangan": ket_item
-                        })
-                        if not sukses_ins: 
-                            berhasil = False
-                            err_terakhir = err_ins
+                    if item['Jenis'] == "Penjualan Barang" and item['Row_Stok']:
+                        if item['Qty'] > item['Sisa_Stok']:
+                            stok_cukup = False
+                            st.error(f"❌ Stok tidak cukup untuk barang: **{item['Nama']}** (Sisa: {item['Sisa_Stok']}, Diminta: {item['Qty']})")
+                            break
                 
-                st.session_state['is_submitting'] = False
-                if berhasil:
-                    st.session_state['keranjang_belanja'] = []
-                    st.cache_data.clear()
-                    st.success("Semua keranjang selesai diproses!")
-                    time.sleep(0.5)
-                    st.rerun()
-                else: st.error(f"Sebagian data gagal disimpan! Error: {err_terakhir}")
+                if stok_cukup:
+                    st.session_state['is_submitting'] = True
+                    waktu = datetime.now(pytz.timezone('Asia/Jakarta')).strftime("%Y-%m-%d %H:%M:%S")
+                    berhasil = True
+                    err_terakhir = ""
+                    
+                    for item in st.session_state['keranjang_belanja']:
+                        j_trx = item['Jenis']
+                        qty = item['Qty']
+                        r_stok = item['Row_Stok']
+                        s_stk = item['Sisa_Stok']
+                        ket_item = item['Nama'] if item['Nama'] else ""
+                        
+                        if j_trx == "Penjualan Barang" and r_stok:
+                            stok_baru = max(0, s_stk - qty)
+                            db_update("stok", r_stok, {"stok": stok_baru})
+                        
+                        for _ in range(qty):
+                            nom_trx = item['Nominal Satuan']
+                            adm_trx = item['Admin/Profit Satuan']
+                            tot_trx = nom_trx + adm_trx if j_trx == "Transaksi Lainnya" else (nom_trx - adm_trx if j_trx == "Tarik Tunai" else nom_trx)
+                            prof_trx = adm_trx
+                            
+                            sukses_ins, err_ins = db_insert("transaksi", {
+                                "waktu": waktu, "jenis": j_trx, "nominal": int(nom_trx),
+                                "admin": int(adm_trx), "total": int(tot_trx), "profit": int(prof_trx),
+                                "keterangan": ket_item
+                            })
+                            if not sukses_ins: 
+                                berhasil = False
+                                err_terakhir = err_ins
+                    
+                    st.session_state['is_submitting'] = False
+                    if berhasil:
+                        st.session_state['keranjang_belanja'] = []
+                        st.cache_data.clear()
+                        st.success("Semua keranjang selesai diproses!")
+                        time.sleep(0.5)
+                        st.rerun()
+                    else: st.error(f"Sebagian data gagal disimpan! Error: {err_terakhir}")
                 
             if c_k2.button("🗑️ KOSONGKAN", use_container_width=True):
                 st.session_state['keranjang_belanja'] = []
@@ -683,7 +697,7 @@ with tab1:
                 
                 Tugas Anda:
                 - Jika JENIS A, ekstrak setiap item menjadi baris dengan format: VOUCHER [PROVIDER] [NOMINAL_ANGKA]
-                - Jika JENIS B, ekstrak setiap transaksi dengan format: MUTASI [TANDA (+ atau -)] [KETERANGAN/NAMA] [NOMINAL_ANGKA]
+                - Jika JENIS B, ekstrak setiap transaksi dengan format: MUTASI [TANDA (+ or -)] [KETERANGAN/NAMA] [NOMINAL_ANGKA]
                 
                 Contoh format balasan:
                 VOUCHER AXIS 13000
@@ -694,7 +708,6 @@ with tab1:
                 Jangan sertakan tanda kutip markdown (seperti ```), jangan berikan teks pengantar, langsung tulis daftar itemnya baris per baris saja.
                 """
                 
-                # Model gemini-3.5-flash-lite
                 res = client.models.generate_content(model='gemini-3.5-flash-lite', contents=[img_temp, prompt_text])
                 lens_placeholder.empty()
 
@@ -714,7 +727,6 @@ with tab1:
                         if len(parts) >= 3:
                             prov = parts[1]
                             try:
-                                # PERBAIKAN DESIMAL
                                 nom_str = parts[2].split(',')[0]
                                 nom_val = int(re.sub(r'[^0-9]', '', nom_str))
                                 if nom_val < 1000: nom_val = nom_val * 1000
@@ -760,7 +772,6 @@ with tab1:
                         if len(parts) >= 2:
                             keterangan = parts[0].strip()
                             try:
-                                # PERBAIKAN DESIMAL
                                 nom_str = parts[1].split(',')[0]
                                 nom_val = int(re.sub(r'[^0-9]', '', nom_str))
                                 if nom_val > 0:
@@ -818,54 +829,66 @@ with tab1:
 
             st.markdown('<div class="floating-container">', unsafe_allow_html=True)
             if st.button("💾 SIMPAN SEMUA TRANSAKSI DRAF", type="primary", use_container_width=True, disabled=st.session_state['is_submitting'] or modal_belum_diisi):
-                st.session_state['is_submitting'] = True
-                waktu = datetime.now(pytz.timezone('Asia/Jakarta')).strftime("%Y-%m-%d %H:%M:%S")
-                berhasil = True
-                err_terakhir = ""
-                
+                stok_draf_cukup = True
                 for item in st.session_state['draf_scan_smart']:
-                    nom = item['Nominal (Rp)']
-                    j_trx = item['Jenis Trx']
-                    r_id = item['Row_Stok']
-                    
-                    if item['Tipe'] == 'Voucher':
-                        prof = item['Profit']
-                        tot = nom
-                        admin_val = prof
-                        ket_item = item['Nama Barang']
-                        if r_id:
-                            for s_item in data_s:
-                                if s_item.get('id') == r_id:
-                                    current_stk = int(s_item.get('stok', 0))
-                                    db_update("stok", r_id, {"stok": max(0, current_stk - 1)})
-                                    break
-                    else:
-                        admin_val = hitung_admin(nom, j_trx)
-                        if j_trx == "Tarik Tunai":
-                            tot = nom - admin_val
-                        else:
-                            tot = nom + admin_val
-                        prof = admin_val
-                        ket_item = item['Nama Barang']
-
-                    sukses_ins, err_ins = db_insert("transaksi", {
-                        "waktu": waktu, "jenis": j_trx, "nominal": int(nom),
-                        "admin": int(admin_val), "total": int(tot), "profit": int(prof),
-                        "keterangan": ket_item
-                    })
-                    if not sukses_ins: 
-                        berhasil = False
-                        err_terakhir = err_ins
+                    if item['Tipe'] == 'Voucher' and item['Row_Stok']:
+                        for s_item in data_s:
+                            if s_item.get('id') == item['Row_Stok']:
+                                current_stk = int(s_item.get('stok', 0))
+                                if current_stk <= 0:
+                                    stok_draf_cukup = False
+                                    st.error(f"❌ Gagal! Stok barang '**{item['Nama Barang']}**' dari hasil scan sudah habis (0).")
+                                break
                 
-                st.session_state['is_submitting'] = False
-                if berhasil:
-                    st.session_state['draf_scan_smart'] = []
-                    st.session_state['gambar_scan_terakhir'] = None
-                    st.cache_data.clear()
-                    st.success("Semua transaksi berhasil disimpan & dihitung otomatis!")
-                    time.sleep(0.5)
-                    st.rerun()
-                else: st.error(f"Sebagian data gagal disimpan! Error: {err_terakhir}")
+                if stok_draf_cukup:
+                    st.session_state['is_submitting'] = True
+                    waktu = datetime.now(pytz.timezone('Asia/Jakarta')).strftime("%Y-%m-%d %H:%M:%S")
+                    berhasil = True
+                    err_terakhir = ""
+                    
+                    for item in st.session_state['draf_scan_smart']:
+                        nom = item['Nominal (Rp)']
+                        j_trx = item['Jenis Trx']
+                        r_id = item['Row_Stok']
+                        
+                        if item['Tipe'] == 'Voucher':
+                            prof = item['Profit']
+                            tot = nom
+                            admin_val = prof
+                            ket_item = item['Nama Barang']
+                            if r_id:
+                                for s_item in data_s:
+                                    if s_item.get('id') == r_id:
+                                        current_stk = int(s_item.get('stok', 0))
+                                        db_update("stok", r_id, {"stok": max(0, current_stk - 1)})
+                                        break
+                        else:
+                            admin_val = hitung_admin(nom, j_trx)
+                            if j_trx == "Tarik Tunai":
+                                tot = nom - admin_val
+                            else:
+                                tot = nom + admin_val
+                            prof = admin_val
+                            ket_item = item['Nama Barang']
+
+                        sukses_ins, err_ins = db_insert("transaksi", {
+                            "waktu": waktu, "jenis": j_trx, "nominal": int(nom),
+                            "admin": int(admin_val), "total": int(tot), "profit": int(prof),
+                            "keterangan": ket_item
+                        })
+                        if not sukses_ins: 
+                            berhasil = False
+                            err_terakhir = err_ins
+                    
+                    st.session_state['is_submitting'] = False
+                    if berhasil:
+                        st.session_state['draf_scan_smart'] = []
+                        st.session_state['gambar_scan_terakhir'] = None
+                        st.cache_data.clear()
+                        st.success("Semua transaksi berhasil disimpan & dihitung otomatis!")
+                        time.sleep(0.5)
+                        st.rerun()
+                    else: st.error(f"Sebagian data gagal disimpan! Error: {err_terakhir}")
             st.markdown('</div>', unsafe_allow_html=True)
         else:
             if sumber_gambar:
@@ -908,6 +931,9 @@ with tab2:
         if pilih_filter_jenis != "Semua": 
             df_t_filtered = df_t_filtered[df_t_filtered['jenis'] == pilih_filter_jenis]
         
+        # --- URUTKAN RIWAYAT: TERBARU DI ATAS, PALING LAMA DI BAWAH ---
+        df_t_filtered = df_t_filtered.sort_values(by='Waktu_Parsed', ascending=False).reset_index(drop=True)
+        
         profit_filter_val = pd.to_numeric(df_t_filtered['profit'], errors='coerce').fillna(0).sum() if len(df_t_filtered) > 0 else 0
         omzet_filter_val = pd.to_numeric(df_t_filtered['total'], errors='coerce').fillna(0).sum() if len(df_t_filtered) > 0 else 0
 
@@ -933,10 +959,7 @@ with tab2:
                 nom_trx = f_uang(row['nominal'])
                 tot_trx = f_uang(row['total'])
                 
-                # Menampilkan Profit
                 profit_trx = f_uang(row.get('profit', 0))
-                
-                # Menampilkan Keterangan/Nama Barang
                 ket_val = row.get('keterangan', '')
                 ket_tampil = f" - <b>{ket_val}</b>" if pd.notna(ket_val) and str(ket_val).strip() else ""
                 
@@ -988,7 +1011,6 @@ with tab2:
                         trx_jenis = sel_row['jenis']
                         trx_nominal = int(sel_row['nominal'])
                         
-                        # Pengembalian stok saat trx dihapus berdasarkan nama/keterangan produk
                         if trx_jenis == "Penjualan Barang" and fresh_stok:
                             trx_ket = str(sel_row.get('keterangan', '')).strip().upper()
                             for stok_item in fresh_stok:
@@ -1180,7 +1202,6 @@ with tab3:
         </div>
     """, unsafe_allow_html=True)
 
-    # --- CATATAN HARIAN YANG AMAN DARI PENGHAPUSAN ---
     st.markdown("---")
     st.markdown("### 📝 Catatan / Catatan Penting Sesi Ini")
     
@@ -1365,7 +1386,6 @@ with tab4:
         if pilih_filter_kat != "Semua Kategori": 
             df_s_filtered = df_s_filtered[df_s_filtered['kategori'] == pilih_filter_kat]
 
-        # --- FITUR URUTKAN STOK ---
         pilihan_urut = st.selectbox(
             "Urutkan Berdasarkan:", 
             options=[
@@ -1501,7 +1521,7 @@ with tab5:
                 time.sleep(0.5)
                 st.rerun()
             else:
-                st.error("Silakan isi minimal salah satu nominal gaji atau bonus!")
+                st.error("Silakan isi salah satu nominal gaji atau bonus terlebih dahulu!")
 
     st.markdown("---")
     st.markdown("### 📋 Tabel Gaji Berjalan (Aktif)")
