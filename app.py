@@ -183,7 +183,7 @@ if data_t is None or data_s is None or data_k is None or data_sesi is None or da
     st.error("⚠️ Gagal terhubung ke Supabase. Periksa kembali URL dan Kunci API Anda.")
     st.stop()
 
-# AMBIL DATA SESI AKTIF & WAKTU MULAI DARI SUPABASE
+# AMBIL DATA SESI AKTIF & WAKTU MULAI DARI SUPABASE (TIDAK MERESET WAKTU KETIKA SIMPAN MODAL)
 def load_active_session_from_db(data_kas_db, data_sesi_db):
     cash = 0
     digi = 0
@@ -196,12 +196,8 @@ def load_active_session_from_db(data_kas_db, data_sesi_db):
     if data_kas_db and len(data_kas_db) > 0:
         sorted_kas = sorted(data_kas_db, key=lambda x: x.get('waktu', ''), reverse=True)
         latest = sorted_kas[0]
-        latest_waktu_kas = latest.get('waktu', '')
-        
-        if latest_waktu_kas > waktu_mulai:
-            waktu_mulai = latest_waktu_kas
-            cash = int(latest.get('cash', 0))
-            digi = int(latest.get('digital', 0))
+        cash = int(latest.get('cash', 0))
+        digi = int(latest.get('digital', 0))
 
     return cash, digi, waktu_mulai
 
@@ -277,17 +273,7 @@ with col_head2:
         current_year = now_jkt.year
         current_month = now_jkt.month
 
-        if data_sesi and len(data_sesi) > 0:
-            df_sesi_prof = pd.DataFrame(data_sesi)
-            df_sesi_prof['Waktu_Tutup_Parsed'] = pd.to_datetime(df_sesi_prof['waktu_tutup_sesi'], errors='coerce')
-            
-            df_sesi_bulan_ini = df_sesi_prof[
-                (df_sesi_prof['Waktu_Tutup_Parsed'].dt.year == current_year) & 
-                (df_sesi_prof['Waktu_Tutup_Parsed'].dt.month == current_month)
-            ]
-            if not df_sesi_bulan_ini.empty:
-                total_profit_bulan_ini += pd.to_numeric(df_sesi_bulan_ini['total_profit'], errors='coerce').fillna(0).sum()
-
+        # MENGHITUNG DARI TABEL TRANSAKSI AGAR AKURAT TANPA DOUBLE COUNT
         if data_t and len(data_t) > 0:
             df_trx_all = pd.DataFrame(data_t)
             df_trx_all['Waktu_Parsed'] = pd.to_datetime(df_trx_all['waktu'], errors='coerce')
@@ -832,7 +818,6 @@ with tab1:
                     for i, item in enumerate(st.session_state['draf_scan_smart']):
                         if item['Tipe'] == 'Mutasi' and not item.get('Is_Masuk', False):
                             item['Jenis Trx'] = target_masal
-                            # PENTING: Paksa hapus dan sinkronisasi widget selectbox di dalam memory session_state!
                             if f"sel_mut_jenis_{i}" in st.session_state:
                                 st.session_state[f"sel_mut_jenis_{i}"] = target_masal
                                 
@@ -870,7 +855,6 @@ with tab1:
             
             if indices_to_delete:
                 st.session_state['draf_scan_smart'] = [item for idx, item in enumerate(st.session_state['draf_scan_smart']) if idx not in indices_to_delete]
-                # PENTING: Bersihkan cache key selectbox saat item dihapus agar index tidak bertumpuk/tertukar!
                 for key in list(st.session_state.keys()):
                     if key.startswith("sel_mut_jenis_"):
                         del st.session_state[key]
@@ -941,7 +925,6 @@ with tab1:
                     if berhasil:
                         st.session_state['draf_scan_smart'] = []
                         st.session_state['gambar_scan_terakhir'] = None
-                        # PENTING: Bersihkan semua cache selectbox saat draf berhasil disimpan
                         for key in list(st.session_state.keys()):
                             if key.startswith("sel_mut_jenis_"):
                                 del st.session_state[key]
@@ -961,7 +944,7 @@ with tab2:
         df_t = pd.DataFrame(data_t)
         df_t['Waktu_Parsed'] = pd.to_datetime(df_t['waktu'], errors='coerce')
         
-        daftar_pilihan_sesi = ["Sesi Aktif Saat Ini"]
+        daftar_pilihan_sesi = ["Sesi Aktif Saat Ini", "Semua Sesi (Bulan Ini)"]
         rentang_sesi_dict = {}
         
         if data_sesi and len(data_sesi) > 0:
@@ -985,6 +968,12 @@ with tab2:
         if pilih_filter_sesi == "Sesi Aktif Saat Ini":
             t_mulai_aktif = pd.to_datetime(st.session_state['waktu_mulai_sesi'])
             df_t_filtered = df_t_filtered[df_t_filtered['Waktu_Parsed'] >= t_mulai_aktif]
+        elif pilih_filter_sesi == "Semua Sesi (Bulan Ini)":
+            now_jkt = datetime.now(pytz.timezone('Asia/Jakarta'))
+            df_t_filtered = df_t_filtered[
+                (df_t_filtered['Waktu_Parsed'].dt.year == now_jkt.year) & 
+                (df_t_filtered['Waktu_Parsed'].dt.month == now_jkt.month)
+            ]
         else:
             w_mulai, w_tutup = rentang_sesi_dict[pilih_filter_sesi]
             df_t_filtered = df_t_filtered[(df_t_filtered['Waktu_Parsed'] >= w_mulai) & (df_t_filtered['Waktu_Parsed'] <= w_tutup)]
@@ -1193,9 +1182,9 @@ with tab3:
 
                 st.session_state['modal_cash'] = int(input_cash_baru)
                 st.session_state['modal_digi'] = int(total_digi_gabungan)
-                st.session_state['waktu_mulai_sesi'] = waktu_sekarang
+                # Waktu mulai sesi tidak diubah agar transaksi hari ini tidak terpotong
                 st.cache_data.clear()
-                st.success("Modal awal sesi berhasil disimpan permanen ke database!")
+                st.success("Modal awal sesi berhasil diperbarui tanpa mereset waktu transaksi!")
                 time.sleep(0.5)
                 st.rerun()
             except Exception as e:
