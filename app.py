@@ -713,13 +713,12 @@ with tab1:
                 
                 Tugas Anda:
                 - Jika JENIS A, ekstrak setiap item menjadi baris dengan format: VOUCHER [PROVIDER] [NOMINAL_ANGKA]
-                - Jika JENIS B, ekstrak setiap baris transaksi yang terlihat. Jika suatu baris tidak memiliki nama atau keterangan teks, berikan keterangan default berupa waktu atau tulisan 'Mutasi' diikuti nominalnya dengan format: MUTASI [TANDA (+ atau -)] [KETERANGAN_ATAU_WAKTU] [NOMINAL_ANGKA]
+                - Jika JENIS B, ekstrak setiap baris transaksi yang terlihat. Sertakan tanda minus (-) atau plus (+) di awal baris jika ada. Format: MUTASI [TANDA (+ atau - atau kosongkan jika tidak ada tanda)] [KETERANGAN_ATAU_WAKTU] [NOMINAL_ANGKA]
                 
                 Contoh format balasan:
                 VOUCHER AXIS 13000
                 MUTASI - ADI NUGROHO 53000
-                MUTASI - 2039WIB 150000
-                MUTASI - 2038WIB 100000
+                MUTASI + 2038WIB 150000
                 
                 Jangan sertakan tanda kutip markdown (seperti ```), jangan berikan teks pengantar, langsung tulis daftar itemnya baris per baris saja.
                 """
@@ -768,20 +767,22 @@ with tab1:
                                         'Nominal (Rp)': nom_val,
                                         'Profit': matched_profit,
                                         'Row_Stok': matched_row_id,
-                                        'Jenis Trx': 'Penjualan Barang'
+                                        'Jenis Trx': 'Penjualan Barang',
+                                        'Is_Masuk': False
                                     })
                             except: pass
                             
                     elif line.startswith("MUTASI"):
                         clean_line = line.replace("MUTASI", "").strip()
                         if clean_line.startswith("-"):
-                            tanda = "-"
+                            is_masuk = False
                             rest = clean_line[1:].strip()
                         elif clean_line.startswith("+"):
-                            tanda = "+"
+                            is_masuk = True
                             rest = clean_line[1:].strip()
                         else:
-                            tanda = "+"
+                            # Jika tidak ada tanda, asumsikan transaksi masuk (Tarik Tunai)
+                            is_masuk = True
                             rest = clean_line
                             
                         parts = rest.rsplit(' ', 1)
@@ -791,10 +792,11 @@ with tab1:
                                 nom_str = parts[1].split(',')[0]
                                 nom_val = int(re.sub(r'[^0-9]', '', nom_str))
                                 if nom_val > 0:
-                                    if tanda == "-":
-                                        default_jenis = "Bank"
-                                    else:
+                                    # Kunci otomatis Tarik Tunai jika transaksi masuk (+) atau tanpa tanda
+                                    if is_masuk:
                                         default_jenis = "Tarik Tunai"
+                                    else:
+                                        default_jenis = "Bank"
                                         
                                     processed_data.append({
                                         'Tipe': 'Mutasi',
@@ -802,7 +804,8 @@ with tab1:
                                         'Nominal (Rp)': nom_val,
                                         'Profit': 0,
                                         'Row_Stok': None,
-                                        'Jenis Trx': default_jenis
+                                        'Jenis Trx': default_jenis,
+                                        'Is_Masuk': is_masuk
                                     })
                             except: pass
 
@@ -819,17 +822,17 @@ with tab1:
             st.markdown("---")
             st.info(f"✨ Berhasil memindai {len(st.session_state['draf_scan_smart'])} item transaksi.")
             
-            # --- FITUR UBAH SEMUA JENIS TRANSAKSI SECARA SERENTAK (MASSAL) ---
-            st.markdown("🔄 **Ubah Semua Jenis Transaksi Serentak:**")
+            # --- FITUR UBAH SEMUA JENIS TRANSAKSI KELUAR SECARA SERENTAK (MASSAL) ---
+            st.markdown("🔄 **Ubah Semua Jenis Transaksi Keluar Serentak:**")
             col_masal1, col_masal2 = st.columns(2)
             with col_masal1:
-                target_masal = st.selectbox("Ubah semua jenis Mutasi ke:", options=["Bank", "E-Wallet", "Tarik Tunai"], key="select_ubah_masal", label_visibility="collapsed")
+                target_masal = st.selectbox("Ubah mutasi keluar ke:", options=["Bank", "E-Wallet"], key="select_ubah_masal", label_visibility="collapsed")
             with col_masal2:
-                if st.button("UBAH SEMUA SEKARANG", use_container_width=True):
+                if st.button("UBAH KELUAR SEKARANG", use_container_width=True):
                     for item in st.session_state['draf_scan_smart']:
-                        if item['Tipe'] == 'Mutasi':
+                        if item['Tipe'] == 'Mutasi' and not item.get('Is_Masuk', False):
                             item['Jenis Trx'] = target_masal
-                    st.success(f"Berhasil mengubah semua jenis mutasi draf menjadi {target_masal}!")
+                    st.success(f"Berhasil mengubah semua mutasi keluar menjadi {target_masal}!")
                     time.sleep(0.3)
                     st.rerun()
 
@@ -840,8 +843,17 @@ with tab1:
                 st.markdown(f"**Item #{i+1} [{item['Tipe']}]**: {item['Nama Barang']} - Nominal: {f_uang(item['Nominal (Rp)'])}")
                 
                 if item['Tipe'] == 'Mutasi':
-                    pilihan_opsi_mutasi = st.selectbox("Pilih Jenis Trx:", options=["Bank", "E-Wallet", "Tarik Tunai"], index=["Bank", "E-Wallet", "Tarik Tunai"].index(item['Jenis Trx']) if item['Jenis Trx'] in ["Bank", "E-Wallet", "Tarik Tunai"] else 0, key=f"sel_mut_jenis_{i}")
-                    item['Jenis Trx'] = pilihan_opsi_mutasi
+                    if item.get('Is_Masuk', False):
+                        # Kunci mati Tarik Tunai untuk transaksi masuk, tanpa opsi ubah
+                        item['Jenis Trx'] = "Tarik Tunai"
+                        st.markdown(f"<span style='color:#14B8A6; font-weight:bold;'>Jenis Trx: Tarik Tunai (Permanen / Masuk)</span>", unsafe_allow_html=True)
+                    else:
+                        opsi_tersedia = ["Bank", "E-Wallet", "Tarik Tunai"]
+                        curr_j = item['Jenis Trx'] if item['Jenis Trx'] in opsi_tersedia else "Bank"
+                        idx_curr = opsi_tersedia.index(curr_j)
+                        
+                        pilihan_opsi_mutasi = st.selectbox("Pilih Jenis Trx:", options=opsi_tersedia, index=idx_curr, key=f"sel_mut_jenis_{i}")
+                        item['Jenis Trx'] = pilihan_opsi_mutasi
                     
                     est_profit = hitung_admin(item['Nominal (Rp)'], item['Jenis Trx'])
                     st.markdown(f"<span style='color:#2ca02c; font-size:14px;'>Estimasi Admin/Profit: {f_uang(est_profit)}</span>", unsafe_allow_html=True)
