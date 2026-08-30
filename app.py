@@ -648,7 +648,7 @@ with tab1:
                 st.rerun()
 
     else: 
-        st.info("💡 **Tips AI Scan Multifungsi:** Upload foto catatan voucher fisik (misal `AXIS:13+13`) atau screenshot mutasi bank/e-wallet. AI akan otomatis mendeteksi jenis gambar dan memprosesnya ke draf!")
+        st.info("💡 **Tips AI Scan Multifungsi:** Upload foto catatan voucher fisik atau screenshot mutasi bank/e-wallet. AI akan otomatis mendeteksi jenis gambar dan memprosesnya ke draf!")
         sumber_gambar = st.file_uploader("Upload Foto Catatan / Mutasi:", type=["jpg", "jpeg", "png"], disabled=modal_belum_diisi)
 
         if sumber_gambar and st.button("🔍 AI SCAN MULTIFUNGSI", use_container_width=True, type="primary", disabled=modal_belum_diisi):
@@ -717,9 +717,9 @@ with tab1:
                 
                 Contoh format balasan:
                 VOUCHER AXIS 13000
-                VOUCHER TSEL 10000
-                MUTASI - NURYANIH 9067000
-                MUTASI + QRIS TIZC 75000
+                MUTASI - ADI NUGROHO 53000
+                MUTASI - 2039WIB 150000
+                MUTASI - 2038WIB 100000
                 
                 Jangan sertakan tanda kutip markdown (seperti ```), jangan berikan teks pengantar, langsung tulis daftar itemnya baris per baris saja.
                 """
@@ -819,16 +819,29 @@ with tab1:
             st.markdown("---")
             st.info(f"✨ Berhasil memindai {len(st.session_state['draf_scan_smart'])} item transaksi.")
             
+            # --- FITUR UBAH SEMUA JENIS TRANSAKSI SECARA SERENTAK (MASSAL) ---
+            st.markdown("🔄 **Ubah Semua Jenis Transaksi Serentak:**")
+            col_masal1, col_masal2 = st.columns(2)
+            with col_masal1:
+                target_masal = st.selectbox("Ubah semua jenis Mutasi ke:", options=["Bank", "E-Wallet", "Tarik Tunai"], key="select_ubah_masal", label_visibility="collapsed")
+            with col_masal2:
+                if st.button("UBAH SEMUA SEKARANG", use_container_width=True):
+                    for item in st.session_state['draf_scan_smart']:
+                        if item['Tipe'] == 'Mutasi':
+                            item['Jenis Trx'] = target_masal
+                    st.success(f"Berhasil mengubah semua jenis mutasi draf menjadi {target_masal}!")
+                    time.sleep(0.3)
+                    st.rerun()
+
+            st.markdown("<hr style='margin:10px 0; border-color:#333;'>", unsafe_allow_html=True)
+            
             indices_to_delete = []
             for i, item in enumerate(st.session_state['draf_scan_smart']):
                 st.markdown(f"**Item #{i+1} [{item['Tipe']}]**: {item['Nama Barang']} - Nominal: {f_uang(item['Nominal (Rp)'])}")
                 
                 if item['Tipe'] == 'Mutasi':
-                    if item['Jenis Trx'] in ["Bank", "E-Wallet"]:
-                        pilihan_opsi_mutasi = st.selectbox("Pilih Jenis Trx:", options=["Bank", "E-Wallet"], index=0 if item['Jenis Trx']=="Bank" else 1, key=f"sel_mut_jenis_{i}")
-                        item['Jenis Trx'] = pilihan_opsi_mutasi
-                    else:
-                        st.markdown(f"<span style='color:#14B8A6; font-weight:bold;'>Jenis Trx: Tarik Tunai (Otomatis)</span>", unsafe_allow_html=True)
+                    pilihan_opsi_mutasi = st.selectbox("Pilih Jenis Trx:", options=["Bank", "E-Wallet", "Tarik Tunai"], index=["Bank", "E-Wallet", "Tarik Tunai"].index(item['Jenis Trx']) if item['Jenis Trx'] in ["Bank", "E-Wallet", "Tarik Tunai"] else 0, key=f"sel_mut_jenis_{i}")
+                    item['Jenis Trx'] = pilihan_opsi_mutasi
                     
                     est_profit = hitung_admin(item['Nominal (Rp)'], item['Jenis Trx'])
                     st.markdown(f"<span style='color:#2ca02c; font-size:14px;'>Estimasi Admin/Profit: {f_uang(est_profit)}</span>", unsafe_allow_html=True)
