@@ -723,7 +723,7 @@ with tab1:
                 Jangan sertakan tanda kutip markdown (seperti ```), jangan berikan teks pengantar, langsung tulis daftar itemnya baris per baris saja.
                 """
                 
-                res = client.models.generate_content(model='gemini-3.6-flash', contents=[img_temp, prompt_text])
+                res = client.models.generate_content(model='gemini-3.5-flash-lite', contents=[img_temp, prompt_text])
                 lens_placeholder.empty()
 
                 raw_text = res.text.strip()
@@ -829,9 +829,13 @@ with tab1:
                 target_masal = st.selectbox("Ubah mutasi keluar ke:", options=["Bank", "E-Wallet"], key="select_ubah_masal", label_visibility="collapsed")
             with col_masal2:
                 if st.button("UBAH KELUAR SEKARANG", use_container_width=True):
-                    for item in st.session_state['draf_scan_smart']:
+                    for i, item in enumerate(st.session_state['draf_scan_smart']):
                         if item['Tipe'] == 'Mutasi' and not item.get('Is_Masuk', False):
                             item['Jenis Trx'] = target_masal
+                            # PENTING: Paksa hapus dan sinkronisasi widget selectbox di dalam memory session_state!
+                            if f"sel_mut_jenis_{i}" in st.session_state:
+                                st.session_state[f"sel_mut_jenis_{i}"] = target_masal
+                                
                     st.success(f"Berhasil mengubah semua mutasi keluar menjadi {target_masal}!")
                     time.sleep(0.3)
                     st.rerun()
@@ -866,6 +870,10 @@ with tab1:
             
             if indices_to_delete:
                 st.session_state['draf_scan_smart'] = [item for idx, item in enumerate(st.session_state['draf_scan_smart']) if idx not in indices_to_delete]
+                # PENTING: Bersihkan cache key selectbox saat item dihapus agar index tidak bertumpuk/tertukar!
+                for key in list(st.session_state.keys()):
+                    if key.startswith("sel_mut_jenis_"):
+                        del st.session_state[key]
                 st.rerun()
 
             st.markdown('<div class="floating-container">', unsafe_allow_html=True)
@@ -933,6 +941,10 @@ with tab1:
                     if berhasil:
                         st.session_state['draf_scan_smart'] = []
                         st.session_state['gambar_scan_terakhir'] = None
+                        # PENTING: Bersihkan semua cache selectbox saat draf berhasil disimpan
+                        for key in list(st.session_state.keys()):
+                            if key.startswith("sel_mut_jenis_"):
+                                del st.session_state[key]
                         st.cache_data.clear()
                         st.success("Semua transaksi berhasil disimpan & dihitung otomatis!")
                         time.sleep(0.5)
