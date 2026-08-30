@@ -724,7 +724,7 @@ with tab1:
                 Jangan sertakan tanda kutip markdown (seperti ```), jangan berikan teks pengantar, langsung tulis daftar itemnya baris per baris saja.
                 """
                 
-                res = client.models.generate_content(model='gemini-3.6-flash', contents=[img_temp, prompt_text])
+                res = client.models.generate_content(model='gemini-3.7-flash', contents=[img_temp, prompt_text])
                 lens_placeholder.empty()
 
                 raw_text = res.text.strip()
