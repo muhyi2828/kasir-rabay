@@ -713,7 +713,7 @@ with tab1:
                 
                 Tugas Anda:
                 - Jika JENIS A, ekstrak setiap item menjadi baris dengan format: VOUCHER [PROVIDER] [NOMINAL_ANGKA]
-                - Jika JENIS B, ekstrak setiap transaksi dengan format: MUTASI [TANDA (+ atau -)] [KETERANGAN/NAMA] [NOMINAL_ANGKA]
+                - Jika JENIS B, ekstrak setiap baris transaksi yang terlihat. Jika suatu baris tidak memiliki nama atau keterangan teks, berikan keterangan default berupa waktu atau tulisan 'Mutasi' diikuti nominalnya dengan format: MUTASI [TANDA (+ atau -)] [KETERANGAN_ATAU_WAKTU] [NOMINAL_ANGKA]
                 
                 Contoh format balasan:
                 VOUCHER AXIS 13000
