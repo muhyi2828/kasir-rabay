@@ -1702,7 +1702,7 @@ with tab6:
             stk_tersedia = int(pilihan_barang_mutasi.get('stok', 0))
             st.markdown(f"📦 Stok tersedia di **{cabang_asal}**: **{stk_tersedia} Pcs**")
 
-             jumlah_mutasi = st.number_input("Jumlah yang akan ditransfer:", min_value=1, max_value=max(1, stk_tersedia), value=1, step=1, key="jml_transfer_stok")
+            jumlah_mutasi = st.number_input("Jumlah yang akan ditransfer:", min_value=1, max_value=max(1, stk_tersedia), value=1, step=1, key="jml_transfer_stok")
 
             if st.button("🚀 PROSES TRANSFER STOK SEKARANG", type="primary", use_container_width=True):
                 if jumlah_mutasi > stk_tersedia:
