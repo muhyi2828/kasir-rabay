@@ -183,10 +183,11 @@ if data_t is None or data_s is None or data_k is None or data_sesi is None or da
     st.error("⚠️ Gagal terhubung ke Supabase. Periksa kembali URL dan Kunci API Anda.")
     st.stop()
 
-# AMBIL DATA SESI AKTIF & WAKTU MULAI DARI SUPABASE (TIDAK MERESET WAKTU KETIKA SIMPAN MODAL)
+# AMBIL DATA SESI AKTIF & WAKTU MULAI DARI SUPABASE (TERPISAH BANK & EWALLET)
 def load_active_session_from_db(data_kas_db, data_sesi_db):
     cash = 0
-    digi = 0
+    bank = 0
+    ewallet = 0
     waktu_mulai = "2020-01-01 00:00:00"
 
     if data_sesi_db and len(data_sesi_db) > 0:
@@ -197,23 +198,23 @@ def load_active_session_from_db(data_kas_db, data_sesi_db):
         sorted_kas = sorted(data_kas_db, key=lambda x: x.get('waktu', ''), reverse=True)
         latest = sorted_kas[0]
         cash = int(latest.get('cash', 0))
-        digi = int(latest.get('digital', 0))
+        bank = int(latest.get('bank', 0))
+        ewallet = int(latest.get('ewallet', 0))
 
-    return cash, digi, waktu_mulai
+    return cash, bank, ewallet, waktu_mulai
 
-db_cash, db_digi, db_waktu_mulai = load_active_session_from_db(data_k, data_sesi)
+db_cash, db_bank, db_ewallet, db_waktu_mulai = load_active_session_from_db(data_k, data_sesi)
 
 if 'waktu_mulai_sesi' not in st.session_state:
     st.session_state['waktu_mulai_sesi'] = db_waktu_mulai
 
-if 'modal_cash' not in st.session_state: 
-    st.session_state['modal_cash'] = db_cash
-
-if 'modal_digi' not in st.session_state: 
-    st.session_state['modal_digi'] = db_digi
+if 'modal_cash' not in st.session_state: st.session_state['modal_cash'] = db_cash
+if 'modal_bank' not in st.session_state: st.session_state['modal_bank'] = db_bank
+if 'modal_ewallet' not in st.session_state: st.session_state['modal_ewallet'] = db_ewallet
 
 if 'penyesuaian_cash' not in st.session_state: st.session_state['penyesuaian_cash'] = 0
-if 'penyesuaian_digi' not in st.session_state: st.session_state['penyesuaian_digi'] = 0
+if 'penyesuaian_bank' not in st.session_state: st.session_state['penyesuaian_bank'] = 0
+if 'penyesuaian_ewallet' not in st.session_state: st.session_state['penyesuaian_ewallet'] = 0
 if 'draf_scan_smart' not in st.session_state: st.session_state['draf_scan_smart'] = []
 if 'gambar_scan_terakhir' not in st.session_state: st.session_state['gambar_scan_terakhir'] = None
 if 'keranjang_belanja' not in st.session_state: st.session_state['keranjang_belanja'] = []
@@ -304,7 +305,8 @@ with col_head2:
             st.session_state['cabang_terpilih'] = pilihan_pindah
             st.query_params["cabang"] = pilihan_pindah
             if 'modal_cash' in st.session_state: del st.session_state['modal_cash']
-            if 'modal_digi' in st.session_state: del st.session_state['modal_digi']
+            if 'modal_bank' in st.session_state: del st.session_state['modal_bank']
+            if 'modal_ewallet' in st.session_state: del st.session_state['modal_ewallet']
             st.session_state['keranjang_belanja'] = []
             st.session_state['draf_scan_smart'] = []
             st.session_state['gambar_scan_terakhir'] = None
@@ -380,7 +382,7 @@ with col_head2:
 tab1, tab2, tab3, tab4, tab5 = st.tabs(["TRANSAKSI", "RIWAYAT", "DASHBOARD", "STOK BARANG", "💰 GAJI"])
 
 with tab1:
-    modal_belum_diisi = (st.session_state['modal_cash'] == 0 and st.session_state['modal_digi'] == 0)
+    modal_belum_diisi = (st.session_state['modal_cash'] == 0 and st.session_state['modal_bank'] == 0 and st.session_state['modal_ewallet'] == 0)
     
     if modal_belum_diisi:
         st.error("⚠️ MASUKAN MODAL AWAL DULU")
@@ -1093,8 +1095,10 @@ with tab3:
         col_ks1, col_ks2 = st.columns(2)
         if col_ks1.button("✅ Ya, Tutup Sesi", type="primary", use_container_width=True, disabled=st.session_state['is_submitting']):
             st.session_state['is_submitting'] = True
+            
             tot_cash_s = 0
-            tot_digi_s = 0
+            tot_bank_s = 0
+            tot_ewallet_s = 0
             prof_s = 0
             
             if data_t and len(data_t) > 0:
@@ -1109,31 +1113,44 @@ with tab3:
                         jns = r['jenis']
                         nom = float(r['nominal'])
                         tot = float(r['total'])
-                        if jns in ["Penjualan Barang", "Transaksi Lainnya"]: tot_cash_s += tot
+                        
+                        if jns in ["Penjualan Barang", "Transaksi Lainnya"]: 
+                            tot_cash_s += tot
                         elif jns == "Tarik Tunai":
                             tot_cash_s -= tot
-                            tot_digi_s += nom
-                        else: 
-                            tot_digi_s -= nom
+                            tot_bank_s += nom # Tarik Tunai diasumsikan masuk Bank
+                        elif jns == "E-Wallet": 
+                            tot_ewallet_s -= nom
+                            tot_cash_s += tot
+                        elif jns == "Bank":
+                            tot_bank_s -= nom
                             tot_cash_s += tot
 
             akhir_c = int(st.session_state['modal_cash'] + tot_cash_s + st.session_state['penyesuaian_cash'])
-            akhir_d = int(st.session_state['modal_digi'] + tot_digi_s + st.session_state['penyesuaian_digi'])
+            akhir_b = int(st.session_state['modal_bank'] + tot_bank_s + st.session_state['penyesuaian_bank'])
+            akhir_e = int(st.session_state['modal_ewallet'] + tot_ewallet_s + st.session_state['penyesuaian_ewallet'])
             waktu_tutup = datetime.now(pytz.timezone('Asia/Jakarta')).strftime("%Y-%m-%d %H:%M:%S")
 
             try:
                 b_sesi, _ = db_insert("riwayat_sesi", {
-                    "waktu_tutup_sesi": waktu_tutup, "modal_cash": int(st.session_state['modal_cash']),
-                    "modal_digital": int(st.session_state['modal_digi']), "total_cash_akhir": akhir_c,
-                    "total_digital_akhir": akhir_d, "total_profit": int(prof_s)
+                    "waktu_tutup_sesi": waktu_tutup, 
+                    "modal_cash": int(st.session_state['modal_cash']),
+                    "modal_bank": int(st.session_state['modal_bank']),
+                    "modal_ewallet": int(st.session_state['modal_ewallet']),
+                    "total_cash_akhir": akhir_c,
+                    "total_bank_akhir": akhir_b,
+                    "total_ewallet_akhir": akhir_e,
+                    "total_profit": int(prof_s)
                 })
 
                 st.session_state['is_submitting'] = False
                 if b_sesi:
                     st.session_state['modal_cash'] = 0
-                    st.session_state['modal_digi'] = 0
+                    st.session_state['modal_bank'] = 0
+                    st.session_state['modal_ewallet'] = 0
                     st.session_state['penyesuaian_cash'] = 0
-                    st.session_state['penyesuaian_digi'] = 0
+                    st.session_state['penyesuaian_bank'] = 0
+                    st.session_state['penyesuaian_ewallet'] = 0
                     st.session_state['waktu_mulai_sesi'] = waktu_tutup
                     st.session_state['reset_session_flag'] = True
                     st.session_state['konfirmasi_tutup_sesi'] = False
@@ -1154,21 +1171,17 @@ with tab3:
 
     st.markdown("---")
 
-    with st.expander("💰 Setel Modal Awal Sesi Ini", expanded=True if (st.session_state['modal_cash'] == 0 and st.session_state['modal_digi'] == 0) else False):
+    with st.expander("💰 Setel Modal Awal Sesi Ini", expanded=True if (st.session_state['modal_cash'] == 0 and st.session_state['modal_bank'] == 0 and st.session_state['modal_ewallet'] == 0) else False):
         input_cash_baru = st.number_input("Setel Cash di Laci (Rp):", value=st.session_state['modal_cash'], step=50000)
         if input_cash_baru > 0: st.caption(f"👀 Terbaca: **{f_uang(input_cash_baru)}**")
             
         col_m1, col_m2 = st.columns(2)
         with col_m1:
-            input_ewallet_baru = st.number_input("Setel Saldo E-Wallet (Rp):", value=0, step=50000)
+            input_ewallet_baru = st.number_input("Setel Saldo E-Wallet (Rp):", value=st.session_state['modal_ewallet'], step=50000)
             if input_ewallet_baru > 0: st.caption(f"👀 {f_uang(input_ewallet_baru)}")
         with col_m2:
-            input_bank_baru = st.number_input("Setel Saldo Bank (Rp):", value=int(st.session_state['modal_digi']), step=50000)
+            input_bank_baru = st.number_input("Setel Saldo Bank (Rp):", value=st.session_state['modal_bank'], step=50000)
             if input_bank_baru > 0: st.caption(f"👀 {f_uang(input_bank_baru)}")
-
-        total_digi_gabungan = input_ewallet_baru + input_bank_baru
-        if total_digi_gabungan > 0:
-            st.markdown(f"<p style='color:#14B8A6; font-size:16px; font-weight:bold;'>Total Saldo Digital Gabungan: {f_uang(total_digi_gabungan)}</p>", unsafe_allow_html=True)
             
         if st.button("💾 Simpan Modal Sesi", type="primary", use_container_width=True):
             waktu_sekarang = datetime.now(pytz.timezone('Asia/Jakarta')).strftime("%Y-%m-%d %H:%M:%S")
@@ -1176,13 +1189,16 @@ with tab3:
                 supabase.table("kas").insert({
                     "waktu": waktu_sekarang,
                     "cash": int(input_cash_baru),
-                    "digital": int(total_digi_gabungan),
+                    "bank": int(input_bank_baru),
+                    "ewallet": int(input_ewallet_baru),
                     "cabang": cabang_aktif
                 }).execute()
 
                 st.session_state['modal_cash'] = int(input_cash_baru)
-                st.session_state['modal_digi'] = int(total_digi_gabungan)
-                # Waktu mulai sesi tidak diubah agar transaksi hari ini tidak terpotong
+                st.session_state['modal_bank'] = int(input_bank_baru)
+                st.session_state['modal_ewallet'] = int(input_ewallet_baru)
+                
+                # Waktu mulai sesi sengaja tidak diubah agar transaksi hari ini tidak terpotong
                 st.cache_data.clear()
                 st.success("Modal awal sesi berhasil diperbarui tanpa mereset waktu transaksi!")
                 time.sleep(0.5)
@@ -1193,7 +1209,8 @@ with tab3:
     st.markdown("---")
 
     tot_transaksi_cash = 0
-    tot_transaksi_digi = 0
+    tot_transaksi_bank = 0
+    tot_transaksi_ewallet = 0
     
     if data_t and len(data_t) > 0:
         df_trx = pd.DataFrame(data_t)
@@ -1207,16 +1224,22 @@ with tab3:
                     jns = r['jenis']
                     nom = float(r['nominal'])
                     tot = float(r['total'])
-                    if jns in ["Penjualan Barang", "Transaksi Lainnya"]: tot_transaksi_cash += tot
+                    
+                    if jns in ["Penjualan Barang", "Transaksi Lainnya"]: 
+                        tot_transaksi_cash += tot
                     elif jns == "Tarik Tunai":
                         tot_transaksi_cash -= tot
-                        tot_transaksi_digi += nom
-                    else: 
-                        tot_transaksi_digi -= nom
+                        tot_transaksi_bank += nom # Tarik Tunai diasumsikan masuk Bank
+                    elif jns == "E-Wallet": 
+                        tot_transaksi_ewallet -= nom
+                        tot_transaksi_cash += tot
+                    elif jns == "Bank":
+                        tot_transaksi_bank -= nom
                         tot_transaksi_cash += tot
 
     total_cash_sistem = st.session_state['modal_cash'] + tot_transaksi_cash
-    total_digi_sistem = st.session_state['modal_digi'] + tot_transaksi_digi
+    total_bank_sistem = st.session_state['modal_bank'] + tot_transaksi_bank
+    total_ewallet_sistem = st.session_state['modal_ewallet'] + tot_transaksi_ewallet
 
     st.markdown(f"""
         <div class="metric-card-blue">
@@ -1237,18 +1260,36 @@ with tab3:
     st.markdown("---")
 
     st.markdown(f"""
-        <div class="metric-card-blue">
-            <h4 style="margin:0; color:#14B8A6;">💳 Saldo Digital Gabungan (Sesi Aktif)</h4>
-            <p style="margin:5px 0 0 0; color:#ccc; font-size:14px;">TOTAL: {f_uang(total_digi_sistem)}</p>
+        <div class="metric-card-blue" style="border-left: 5px solid #ff9800;">
+            <h4 style="margin:0; color:#ff9800;">📱 Saldo E-Wallet (Sesi Aktif)</h4>
+            <p style="margin:5px 0 0 0; color:#ccc; font-size:14px;">TOTAL: {f_uang(total_ewallet_sistem)}</p>
         </div>
     """, unsafe_allow_html=True)
     
-    penyesuaian_digi = st.number_input("Koreksi / Penyesuaian Saldo (+ / - Rp):", value=st.session_state['penyesuaian_digi'], step=10000, key="peny_digi")
-    hasil_akhir_digi = total_digi_sistem + penyesuaian_digi
+    penyesuaian_ewallet = st.number_input("Koreksi Saldo E-Wallet (+ / - Rp):", value=st.session_state['penyesuaian_ewallet'], step=10000, key="peny_ewallet")
+    hasil_akhir_ewallet = total_ewallet_sistem + penyesuaian_ewallet
     st.markdown(f"""
-        <div style="background-color:#111; padding:15px; border-radius:8px; border:1px solid #14B8A6; text-align:center; margin-bottom:20px;">
-            <span style="color:#aaa; font-size:14px;">HASIL AKHIR SALDO DIGITAL:</span><br>
-            <span style="color:#14B8A6; font-size:24px; font-weight:bold;">{f_uang(hasil_akhir_digi)}</span>
+        <div style="background-color:#111; padding:15px; border-radius:8px; border:1px solid #ff9800; text-align:center; margin-bottom:20px;">
+            <span style="color:#aaa; font-size:14px;">HASIL AKHIR SALDO E-WALLET:</span><br>
+            <span style="color:#ff9800; font-size:24px; font-weight:bold;">{f_uang(hasil_akhir_ewallet)}</span>
+        </div>
+    """, unsafe_allow_html=True)
+
+    st.markdown("---")
+
+    st.markdown(f"""
+        <div class="metric-card-blue" style="border-left: 5px solid #2ca02c;">
+            <h4 style="margin:0; color:#2ca02c;">💳 Saldo Bank (Sesi Aktif)</h4>
+            <p style="margin:5px 0 0 0; color:#ccc; font-size:14px;">TOTAL: {f_uang(total_bank_sistem)}</p>
+        </div>
+    """, unsafe_allow_html=True)
+    
+    penyesuaian_bank = st.number_input("Koreksi Saldo Bank (+ / - Rp):", value=st.session_state['penyesuaian_bank'], step=10000, key="peny_bank")
+    hasil_akhir_bank = total_bank_sistem + penyesuaian_bank
+    st.markdown(f"""
+        <div style="background-color:#111; padding:15px; border-radius:8px; border:1px solid #2ca02c; text-align:center; margin-bottom:20px;">
+            <span style="color:#aaa; font-size:14px;">HASIL AKHIR SALDO BANK:</span><br>
+            <span style="color:#2ca02c; font-size:24px; font-weight:bold;">{f_uang(hasil_akhir_bank)}</span>
         </div>
     """, unsafe_allow_html=True)
 
@@ -1297,9 +1338,21 @@ with tab3:
     
     if data_sesi and len(data_sesi) > 0:
         df_riwayat_sesi = pd.DataFrame(data_sesi)
-        df_sesi_display = df_riwayat_sesi[['waktu_tutup_sesi', 'modal_cash', 'modal_digital', 'total_cash_akhir', 'total_digital_akhir', 'total_profit']].copy()
-        for col in ['modal_cash', 'modal_digital', 'total_cash_akhir', 'total_digital_akhir', 'total_profit']:
-            if col in df_sesi_display.columns:
+        
+        # Mengecek apakah ada kolom baru atau lama agar tidak error
+        kolom_ditampilkan = ['waktu_tutup_sesi', 'modal_cash']
+        if 'modal_bank' in df_riwayat_sesi.columns and 'modal_ewallet' in df_riwayat_sesi.columns:
+            kolom_ditampilkan.extend(['modal_bank', 'modal_ewallet', 'total_bank_akhir', 'total_ewallet_akhir'])
+        else:
+            kolom_ditampilkan.extend(['modal_digital', 'total_digital_akhir'])
+            
+        kolom_ditampilkan.extend(['total_cash_akhir', 'total_profit'])
+        
+        kolom_yang_ada = [col for col in kolom_ditampilkan if col in df_riwayat_sesi.columns]
+        df_sesi_display = df_riwayat_sesi[kolom_yang_ada].copy()
+        
+        for col in kolom_yang_ada:
+            if col != 'waktu_tutup_sesi':
                 df_sesi_display[col] = df_sesi_display[col].apply(lambda x: f_uang(x))
         
         st.dataframe(df_sesi_display, use_container_width=True, hide_index=True)
