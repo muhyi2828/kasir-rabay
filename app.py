@@ -183,7 +183,7 @@ if data_t is None or data_s is None or data_k is None or data_sesi is None or da
     st.error("⚠️ Gagal terhubung ke Supabase. Periksa kembali URL dan Kunci API Anda.")
     st.stop()
 
-# AMBIL DATA SESI AKTIF & WAKTU MULAI DARI SUPABASE (TERPISAH BANK & EWALLET)
+# AMBIL DATA SESI AKTIF & WAKTU MULAI DARI SUPABASE (DENGAN PENGAMANAN NULL)
 def load_active_session_from_db(data_kas_db, data_sesi_db):
     cash = 0
     bank = 0
@@ -197,9 +197,9 @@ def load_active_session_from_db(data_kas_db, data_sesi_db):
     if data_kas_db and len(data_kas_db) > 0:
         sorted_kas = sorted(data_kas_db, key=lambda x: x.get('waktu', ''), reverse=True)
         latest = sorted_kas[0]
-        cash = int(latest.get('cash', 0))
-        bank = int(latest.get('bank', 0))
-        ewallet = int(latest.get('ewallet', 0))
+        cash = int(latest.get('cash') or 0)
+        bank = int(latest.get('bank') or 0)
+        ewallet = int(latest.get('ewallet') or 0)
 
     return cash, bank, ewallet, waktu_mulai
 
@@ -274,7 +274,6 @@ with col_head2:
         current_year = now_jkt.year
         current_month = now_jkt.month
 
-        # MENGHITUNG DARI TABEL TRANSAKSI AGAR AKURAT TANPA DOUBLE COUNT
         if data_t and len(data_t) > 0:
             df_trx_all = pd.DataFrame(data_t)
             df_trx_all['Waktu_Parsed'] = pd.to_datetime(df_trx_all['waktu'], errors='coerce')
@@ -395,7 +394,6 @@ with tab1:
         quick = st.text_input("INPUT KODE CEPAT/BARCODE", placeholder="Ketik kode cepat / barcode", label_visibility="collapsed", disabled=modal_belum_diisi)
         st.markdown('</div>', unsafe_allow_html=True)
         
-        # --- FITUR SARAN / PENCARIAN BARANG OTOMATIS ---
         if quick and not modal_belum_diisi and len(data_s) > 0:
             query_input = quick.upper().strip()
             saran_barang = [
@@ -566,7 +564,6 @@ with tab1:
             
             c_k1, c_k2 = st.columns(2)
             if c_k1.button("🚀 PROSES SEMUA", type="primary", use_container_width=True, disabled=st.session_state['is_submitting'] or modal_belum_diisi):
-                # Validasi kumulatif stok pada keranjang
                 permintaan_keranjang = {}
                 for item in st.session_state['keranjang_belanja']:
                     if item['Jenis'] == "Penjualan Barang" and item['Row_Stok']:
@@ -648,7 +645,6 @@ with tab1:
                 img_temp.save(buffered, format="JPEG")
                 img_str = base64.b64encode(buffered.getvalue()).decode()
 
-                # --- ANIMASI PEMINDAI GOOGLE LENS ---
                 lens_placeholder = st.empty()
                 lens_placeholder.markdown(f"""
                     <style>
@@ -769,7 +765,6 @@ with tab1:
                             is_masuk = True
                             rest = clean_line[1:].strip()
                         else:
-                            # Jika tidak ada tanda, asumsikan transaksi masuk (Tarik Tunai)
                             is_masuk = True
                             rest = clean_line
                             
@@ -780,7 +775,6 @@ with tab1:
                                 nom_str = parts[1].split(',')[0]
                                 nom_val = int(re.sub(r'[^0-9]', '', nom_str))
                                 if nom_val > 0:
-                                    # Kunci otomatis Tarik Tunai jika transaksi masuk (+) atau tanpa tanda
                                     if is_masuk:
                                         default_jenis = "Tarik Tunai"
                                     else:
@@ -810,7 +804,6 @@ with tab1:
             st.markdown("---")
             st.info(f"✨ Berhasil memindai {len(st.session_state['draf_scan_smart'])} item transaksi.")
             
-            # --- FITUR UBAH SEMUA JENIS TRANSAKSI KELUAR SECARA SERENTAK (MASSAL) ---
             st.markdown("🔄 **Ubah Semua Jenis Transaksi Keluar Serentak:**")
             col_masal1, col_masal2 = st.columns(2)
             with col_masal1:
@@ -835,7 +828,6 @@ with tab1:
                 
                 if item['Tipe'] == 'Mutasi':
                     if item.get('Is_Masuk', False):
-                        # Kunci mati Tarik Tunai untuk transaksi masuk, tanpa opsi ubah
                         item['Jenis Trx'] = "Tarik Tunai"
                         st.markdown(f"<span style='color:#14B8A6; font-weight:bold;'>Jenis Trx: Tarik Tunai (Permanen / Masuk)</span>", unsafe_allow_html=True)
                     else:
@@ -864,7 +856,6 @@ with tab1:
 
             st.markdown('<div class="floating-container">', unsafe_allow_html=True)
             if st.button("💾 SIMPAN SEMUA TRANSAKSI DRAF", type="primary", use_container_width=True, disabled=st.session_state['is_submitting'] or modal_belum_diisi):
-                # Validasi kumulatif stok pada draf OCR
                 permintaan_barang = {}
                 for item in st.session_state['draf_scan_smart']:
                     if item['Tipe'] == 'Voucher' and item['Row_Stok']:
@@ -983,7 +974,6 @@ with tab2:
         if pilih_filter_jenis != "Semua": 
             df_t_filtered = df_t_filtered[df_t_filtered['jenis'] == pilih_filter_jenis]
         
-        # --- URUTKAN RIWAYAT: TERBARU DI ATAS, PALING LAMA DI BAWAH ---
         df_t_filtered = df_t_filtered.sort_values(by='Waktu_Parsed', ascending=False).reset_index(drop=True)
         
         profit_filter_val = pd.to_numeric(df_t_filtered['profit'], errors='coerce').fillna(0).sum() if len(df_t_filtered) > 0 else 0
@@ -1118,7 +1108,7 @@ with tab3:
                             tot_cash_s += tot
                         elif jns == "Tarik Tunai":
                             tot_cash_s -= tot
-                            tot_bank_s += nom # Tarik Tunai diasumsikan masuk Bank
+                            tot_bank_s += nom
                         elif jns == "E-Wallet": 
                             tot_ewallet_s -= nom
                             tot_cash_s += tot
@@ -1198,7 +1188,6 @@ with tab3:
                 st.session_state['modal_bank'] = int(input_bank_baru)
                 st.session_state['modal_ewallet'] = int(input_ewallet_baru)
                 
-                # Waktu mulai sesi sengaja tidak diubah agar transaksi hari ini tidak terpotong
                 st.cache_data.clear()
                 st.success("Modal awal sesi berhasil diperbarui tanpa mereset waktu transaksi!")
                 time.sleep(0.5)
@@ -1229,7 +1218,7 @@ with tab3:
                         tot_transaksi_cash += tot
                     elif jns == "Tarik Tunai":
                         tot_transaksi_cash -= tot
-                        tot_transaksi_bank += nom # Tarik Tunai diasumsikan masuk Bank
+                        tot_transaksi_bank += nom
                     elif jns == "E-Wallet": 
                         tot_transaksi_ewallet -= nom
                         tot_transaksi_cash += tot
@@ -1339,7 +1328,6 @@ with tab3:
     if data_sesi and len(data_sesi) > 0:
         df_riwayat_sesi = pd.DataFrame(data_sesi)
         
-        # Mengecek apakah ada kolom baru atau lama agar tidak error
         kolom_ditampilkan = ['waktu_tutup_sesi', 'modal_cash']
         if 'modal_bank' in df_riwayat_sesi.columns and 'modal_ewallet' in df_riwayat_sesi.columns:
             kolom_ditampilkan.extend(['modal_bank', 'modal_ewallet', 'total_bank_akhir', 'total_ewallet_akhir'])
