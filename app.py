@@ -165,7 +165,7 @@ def db_delete(table_name, row_id):
     except:
         return False
 
-# AMBIL DATA DARI SUPABASE
+# AMBIL DATA DARI SUPABASE SESUAI CABANG AKTIF
 with st.spinner("⏳ Sinkronisasi Database Supabase..."):
     data_t = fetch_table_data("transaksi", cabang_aktif)
     data_s = fetch_table_data("stok", cabang_aktif)
@@ -373,8 +373,8 @@ with col_head2:
             st.rerun()
     st.markdown("</div>", unsafe_allow_html=True)
 
-# --- TAB UTAMA (5 TAB) ---
-tab1, tab2, tab3, tab4, tab5 = st.tabs(["TRANSAKSI", "RIWAYAT", "DASHBOARD", "STOK BARANG", "💰 GAJI"])
+# --- TAB UTAMA (6 TAB: DITAMBAH TAB MUTASI STOK DI PALING KANAN) ---
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["TRANSAKSI", "RIWAYAT", "DASHBOARD", "STOK BARANG", "💰 GAJI", "🚚 MUTASI STOK"])
 
 with tab1:
     modal_belum_diisi = (st.session_state['modal_cash'] == 0 and st.session_state['modal_bank'] == 0 and st.session_state['modal_ewallet'] == 0)
@@ -1663,3 +1663,85 @@ with tab5:
         st.dataframe(df_arsip_disp, use_container_width=True, hide_index=True)
     else:
         st.info("Belum ada riwayat arsip gaji.")
+
+# --- TAB 6: MUTASI STOK ANTAR CABANG ---
+with tab6:
+    st.markdown("### 🚚 Transfer / Ambil Stok Antar Cabang")
+    st.info("Gunakan fitur ini untuk mengambil atau mengirim stok dari satu cabang ke cabang lainnya tanpa input manual ulang.")
+
+    daftar_kode_cabang = list(mapping_cabang.keys())
+    
+    col_mc1, col_mc2 = st.columns(2)
+    with col_mc1:
+        cabang_asal = st.selectbox("Cabang Pengirim (Asal Stok):", options=daftar_kode_cabang, format_func=lambda x: f"{x} ({mapping_cabang.get(x)})", key="mutasi_asal")
+    with col_mc2:
+        # Filter agar cabang tujuan tidak sama dengan cabang asal
+        opsi_tujuan = [c for c in daftar_kode_cabang if c != cabang_asal]
+        cabang_tujuan = st.selectbox("Cabang Penerima (Tujuan Stok):", options=opsi_tujuan, format_func=lambda x: f"{x} ({mapping_cabang.get(x)})", key="mutasi_tujuan")
+
+    # Ambil data stok khusus dari cabang pengirim
+    @st.cache_data(ttl=2)
+    def fetch_stok_asal(cabang_kode):
+        try:
+            res = supabase.table("stok").select("*").eq("cabang", cabang_kode).execute()
+            return res.data if res.data else []
+        except:
+            return []
+
+    stok_pengirim = fetch_stok_asal(cabang_asal)
+
+    if stok_pengirim:
+        pilihan_barang_mutasi = st.selectbox(
+            "Pilih Barang yang Akan Dimutasi:",
+            options=stok_pengirim,
+            format_func=lambda x: f"{x.get('nama_barang')} | Sisa Stok: {x.get('stok')} | Harga Jual: {f_uang(x.get('harga_jual'))}",
+            key="pilih_mutasi_barang"
+        )
+
+        if pilihan_barang_mutasi:
+            stk_tersedia = int(pilihan_barang_mutasi.get('stok', 0))
+            st.markdown(f"📦 Stok tersedia di **{cabang_asal}**: **{stk_tersedia} Pcs**")
+
+             jumlah_mutasi = st.number_input("Jumlah yang akan ditransfer:", min_value=1, max_value=max(1, stk_tersedia), value=1, step=1, key="jml_transfer_stok")
+
+            if st.button("🚀 PROSES TRANSFER STOK SEKARANG", type="primary", use_container_width=True):
+                if jumlah_mutasi > stk_tersedia:
+                    st.error("❌ Jumlah transfer melebihi stok yang tersedia di cabang pengirim!")
+                else:
+                    try:
+                        # 1. Kurangi stok di cabang asal
+                        id_asal = pilihan_barang_mutasi.get('id')
+                        stok_baru_asal = stk_tersedia - jumlah_mutasi
+                        supabase.table("stok").update({"stok": stok_baru_asal}).eq("id", id_asal).execute()
+
+                        # 2. Cek apakah barang yang sama sudah ada di cabang tujuan
+                        res_tujuan = supabase.table("stok").select("*").eq("cabang", cabang_tujuan).eq("nama_barang", pilihan_barang_mutasi.get('nama_barang')).execute()
+                        data_tujuan_list = res_tujuan.data if res_tujuan.data else []
+
+                        if data_tujuan_list:
+                            # Jika barang sudah ada di cabang tujuan, tambahkan stoknya
+                            id_tujuan = data_tujuan_list[0].get('id')
+                            stok_lama_tujuan = int(data_tujuan_list[0].get('stok', 0))
+                            stok_baru_tujuan = stok_lama_tujuan + jumlah_mutasi
+                            supabase.table("stok").update({"stok": stok_baru_tujuan}).eq("id", id_tujuan).execute()
+                        else:
+                            # Jika barang belum ada di cabang tujuan, buat baris stok baru untuk cabang tujuan
+                            supabase.table("stok").insert({
+                                "cabang": cabang_tujuan,
+                                "nama_barang": pilihan_barang_mutasi.get('nama_barang'),
+                                "stok": jumlah_mutasi,
+                                "harga_modal": pilihan_barang_mutasi.get('harga_modal'),
+                                "harga_jual": pilihan_barang_mutasi.get('harga_jual'),
+                                "kode_cepat": pilihan_barang_mutasi.get('kode_cepat'),
+                                "barcode": pilihan_barang_mutasi.get('barcode'),
+                                "kategori": pilihan_barang_mutasi.get('kategori', 'Umum')
+                            }).execute()
+
+                        st.cache_data.clear()
+                        st.success(f"🎉 Berhasil mentransfer {jumlah_mutasi} pcs '{pilihan_barang_mutasi.get('nama_barang')}' dari {cabang_asal} ke {cabang_tujuan}!")
+                        time.sleep(1)
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Gagal melakukan mutasi stok: {e}")
+    else:
+        st.warning(f"⚠️ Belum ada data stok di cabang pengirim ({cabang_asal}).")
