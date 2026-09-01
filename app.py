@@ -1079,11 +1079,13 @@ with tab3:
     if st.session_state.get('konfirmasi_tutup_sesi', False):
         st.warning("⚠️ Apakah Anda yakin ingin mengakhiri sesi ini? Semua kalkulasi kas dan profit sesi ini akan ditutup dan diarsipkan.")
         col_ks1, col_ks2 = st.columns(2)
+        
         if col_ks1.button("✅ Ya, Tutup Sesi", type="primary", use_container_width=True, disabled=st.session_state['is_submitting']):
             st.session_state['is_submitting'] = True
             
             tot_cash_s = 0
-            tot_digital_s = 0
+            tot_bank_s = 0
+            tot_ewallet_s = 0
             prof_s = 0
             
             if data_t and len(data_t) > 0:
@@ -1103,33 +1105,45 @@ with tab3:
                             tot_cash_s += tot
                         elif jns == "Tarik Tunai":
                             tot_cash_s -= tot
-                            tot_digital_s += nom
+                            tot_bank_s += nom
                         elif jns == "E-Wallet": 
-                            tot_digital_s -= nom
+                            tot_ewallet_s -= nom
                             tot_cash_s += tot
                         elif jns == "Bank":
-                            tot_digital_s -= nom
+                            tot_bank_s -= nom
                             tot_cash_s += tot
 
-            total_modal_digital_awal = st.session_state['modal_bank'] + st.session_state['modal_ewallet']
+            # Hitung akhir kas
             akhir_c = int(st.session_state['modal_cash'] + tot_cash_s + st.session_state['penyesuaian_cash'])
-            akhir_digi = int(total_modal_digital_awal + tot_digital_s + st.session_state['penyesuaian_digital'])
+            # Karena penyesuaian digital digabung di UI, kita simpan ke salah satu kolom database agar aman (misal: bank)
+            akhir_b = int(st.session_state['modal_bank'] + tot_bank_s + st.session_state['penyesuaian_digital'])
+            akhir_e = int(st.session_state['modal_ewallet'] + tot_ewallet_s)
             
             waktu_tutup = datetime.now(pytz.timezone('Asia/Jakarta')).strftime("%Y-%m-%d %H:%M:%S")
 
             try:
-                b_sesi, _ = db_insert("riwayat_sesi", {
+                # MENGIRIM KE KOLOM YANG TEPAT (bank & ewallet terpisah sesuai DB)
+                b_sesi, err_msg = db_insert("riwayat_sesi", {
                     "waktu_tutup_sesi": waktu_tutup, 
                     "modal_cash": int(st.session_state['modal_cash']),
                     "modal_bank": int(st.session_state['modal_bank']),
                     "modal_ewallet": int(st.session_state['modal_ewallet']),
                     "total_cash_akhir": akhir_c,
-                    "total_digital_akhir": akhir_digi,
+                    "total_bank_akhir": akhir_b,
+                    "total_ewallet_akhir": akhir_e,
                     "total_profit": int(prof_s)
                 })
 
-                st.session_state['is_submitting'] = False
                 if b_sesi:
+                    # MENGOSONGKAN TABEL KAS AGAR REFRESH TIDAK MENGAMBIL MODAL LAMA
+                    supabase.table("kas").insert({
+                        "waktu": waktu_tutup,
+                        "cash": 0,
+                        "bank": 0,
+                        "ewallet": 0,
+                        "cabang": cabang_aktif
+                    }).execute()
+
                     st.session_state['modal_cash'] = 0
                     st.session_state['modal_bank'] = 0
                     st.session_state['modal_ewallet'] = 0
@@ -1139,12 +1153,14 @@ with tab3:
                     st.session_state['reset_session_flag'] = True
                     st.session_state['konfirmasi_tutup_sesi'] = False
                     
+                    st.session_state['is_submitting'] = False
                     st.cache_data.clear()
                     st.success("🎉 Sesi Berhasil Diakhiri & Diarsipkan!")
                     time.sleep(1)
                     st.rerun()
                 else:
-                    st.error("❌ Gagal menyimpan data ke Supabase.")
+                    st.session_state['is_submitting'] = False
+                    st.error(f"❌ Gagal tutup sesi di database: {err_msg}")
             except Exception as e:
                 st.session_state['is_submitting'] = False
                 st.error(f"Detail Error: {e}")
@@ -1307,6 +1323,10 @@ with tab3:
     if data_sesi and len(data_sesi) > 0:
         df_riwayat_sesi = pd.DataFrame(data_sesi)
         
+        # Gabungkan bank dan ewallet menjadi digital untuk tampilan tabel
+        if 'total_bank_akhir' in df_riwayat_sesi.columns and 'total_ewallet_akhir' in df_riwayat_sesi.columns:
+            df_riwayat_sesi['total_digital_akhir'] = pd.to_numeric(df_riwayat_sesi['total_bank_akhir'], errors='coerce').fillna(0) + pd.to_numeric(df_riwayat_sesi['total_ewallet_akhir'], errors='coerce').fillna(0)
+            
         kolom_ditampilkan = ['waktu_tutup_sesi', 'modal_cash', 'total_digital_akhir', 'total_cash_akhir', 'total_profit']
         kolom_yang_ada = [col for col in kolom_ditampilkan if col in df_riwayat_sesi.columns]
         df_sesi_display = df_riwayat_sesi[kolom_yang_ada].copy()
