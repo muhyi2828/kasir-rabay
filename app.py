@@ -457,7 +457,6 @@ with tab1:
         if nominal_trx > 0:
             st.markdown(f"<p style='color:#14B8A6; font-size:18px; font-weight:bold;'>Format: {f_uang(nominal_trx)}</p>", unsafe_allow_html=True)
         
-            profit_manual = 0
 profit_manual = 0
 if jenis_terpilih == "Transaksi Lainnya":
     tipe_trans_lainnya = st.radio(
