@@ -468,7 +468,7 @@ if jenis_terpilih == "Transaksi Lainnya":
         key="radio_tipe_trans_lain"
     )
 
-            st.caption("Keuntungan Manual (Rp):")
+    st.caption("Keuntungan Manual (Rp):")
             profit_manual = st.number_input("Profit", value=0, step=1000, label_visibility="collapsed", disabled=modal_belum_diisi)
 
         if nominal_trx > 0 or (jenis_terpilih == "Transaksi Lainnya" and (nominal_trx > 0 or profit_manual > 0)):
