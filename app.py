@@ -478,7 +478,7 @@ if jenis_terpilih == "Transaksi Lainnya":
     )
 
 
-        if nominal_trx > 0 or (jenis_terpilih == "Transaksi Lainnya" and (nominal_trx > 0 or profit_manual > 0)):
+        if nominal_trx > 0 or (jenis_terpilih = "Transaksi Lainnya" and (nominal_trx > 0 or profit_manual > 0)):
             if jenis_terpilih == "Penjualan Barang":
                 admin = 0
                 total_uang = nominal_trx
