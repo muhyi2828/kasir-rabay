@@ -457,21 +457,12 @@ with tab1:
         if nominal_trx > 0:
             st.markdown(f"<p style='color:#14B8A6; font-size:18px; font-weight:bold;'>Format: {f_uang(nominal_trx)}</p>", unsafe_allow_html=True)
         
-profit_manual = 0
-if jenis_terpilih == "Transaksi Lainnya":
-    tipe_trans_lainnya = st.radio(
-        "Jenis Transaksi Lainnya:",
-        [
-            "💵 Pemasukan Kas Biasa (Hanya Tambah Cash)",
-            "🔄 Tarik Tunai / Transfer (Tambah Cash & Kurangi Digital)",
-        ],
-        key="radio_tipe_trans_lain"
-    )
+        profit_manual = 0
+        if jenis_terpilih == "Transaksi Lainnya":
+            st.caption("Keuntungan Manual (Rp):")
+            profit_manual = st.number_input("Profit", value=0, step=1000, label_visibility="collapsed", disabled=modal_belum_diisi)
 
-    st.caption("Keuntungan Manual (Rp):")
-    profit_manual = st.number_input("Profit", value=0, step=1000, label_visibility="collapsed", disabled=modal_belum_diisi)
-
-if nominal_trx > 0 or (jenis_terpilih == "Transaksi Lainnya" and (nominal_trx > 0 or profit_manual > 0)):
+        if nominal_trx > 0 or (jenis_terpilih == "Transaksi Lainnya" and (nominal_trx > 0 or profit_manual > 0)):
             if jenis_terpilih == "Penjualan Barang":
                 admin = 0
                 total_uang = nominal_trx
@@ -540,10 +531,10 @@ if nominal_trx > 0 or (jenis_terpilih == "Transaksi Lainnya" and (nominal_trx > 
                         st.rerun()
             st.markdown('</div>', unsafe_allow_html=True)
 
-            if st.session_state['keranjang_belanja']:
-             st.markdown("---")
-             st.write("### 🛒 Keranjang Belanjaan")
-  
+        if st.session_state['keranjang_belanja']:
+            st.markdown("---")
+            st.write("### 🛒 Keranjang Belanjaan")
+            
             for idx_c, cart_item in enumerate(st.session_state['keranjang_belanja']):
                 c_nama = cart_item['Nama']
                 c_jenis = cart_item['Jenis']
