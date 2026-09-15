@@ -540,7 +540,7 @@ if nominal_trx > 0 or (jenis_terpilih == "Transaksi Lainnya" and (nominal_trx > 
                         st.rerun()
             st.markdown('</div>', unsafe_allow_html=True)
 
-        if st.session_state['keranjang_belanja']:
+            if st.session_state['keranjang_belanja']:
             st.markdown("---")
             st.write("### 🛒 Keranjang Belanjaan")
             
