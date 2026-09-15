@@ -454,7 +454,7 @@ with tab1:
         st.markdown("<br>", unsafe_allow_html=True)
         st.caption("Nominal / Harga (Rp):")
         nominal_trx = st.number_input("Nominal", value=nominal_val, step=10000, label_visibility="collapsed", disabled=modal_belum_diisi)
-        if nominal_trx > 0:
+if nominal_trx > 0:
             st.markdown(f"<p style='color:#14B8A6; font-size:18px; font-weight:bold;'>Format: {f_uang(nominal_trx)}</p>", unsafe_allow_html=True)
         
 profit_manual = 0
